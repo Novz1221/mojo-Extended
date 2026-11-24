@@ -1,0 +1,333 @@
+package git.artdeell.mojo.contentbrowser;
+
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+
+import git.artdeell.mojo.modding.modpacks.api.ApiHandler;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+
+/** Search and file lookup against Modrinth and CurseForge for mods, resource packs, shaders and saves. */
+public final class ContentApi {
+    public static final int PLATFORM_MODRINTH = 0;
+    public static final int PLATFORM_CURSEFORGE = 1;
+
+    public static final String TYPE_MOD = "mod";
+    public static final String TYPE_RESOURCEPACK = "resourcepack";
+    public static final String TYPE_SHADER = "shader";
+    public static final String TYPE_SAVES = "world";
+
+    public static final int PAGE_SIZE = 20;
+
+    private static final int CF_GAME_ID = 432;
+    private static final int CF_CLASS_MOD = 6;
+    private static final int CF_CLASS_RESOURCEPACK = 12;
+    private static final int CF_CLASS_SHADER = 6552;
+    private static final int CF_CLASS_WORLD = 17;
+
+    /** Sort keys shared by the UI, the strings are in the same order. */
+    public static final String[] SORT_KEYS = {"relevance", "downloads", "follows", "newest", "updated"};
+    private static final int[] CF_SORT = {1, 6, 2, 11, 3};
+
+    private static ApiHandler sModrinth;
+    private static ApiHandler sCurseforge;
+    private static String sCurseforgeKey;
+
+    private ContentApi() {}
+
+    public static class Item {
+        public int platform;
+        public String type;
+        public String id;
+        public String title;
+        public String description;
+        public String iconUrl;
+        public String author;
+        public long downloads;
+        public long follows;
+        public String tags;
+    }
+
+    public static class Page {
+        public List<Item> items = new ArrayList<>();
+        public int total;
+    }
+
+    public static class FileVersion {
+        public String name;
+        public String url;
+        public String fileName;
+    }
+
+    public static boolean hasCurseforgeKey(String key) {
+        return key != null && !key.isEmpty() && !key.equals("DUMMY");
+    }
+
+    private static synchronized ApiHandler modrinth() {
+        if (sModrinth == null) sModrinth = new ApiHandler("https://api.modrinth.com/v2");
+        return sModrinth;
+    }
+
+    private static synchronized ApiHandler curseforge(String key) {
+        if (sCurseforge == null || !key.equals(sCurseforgeKey)) {
+            sCurseforge = new ApiHandler("https://api.curseforge.com/v1", key);
+            sCurseforgeKey = key;
+        }
+        return sCurseforge;
+    }
+
+    private static String str(JsonObject object, String key) {
+        JsonElement element = object.get(key);
+        if (element == null || element.isJsonNull()) return "";
+        return element.getAsString();
+    }
+
+    private static long num(JsonObject object, String key) {
+        JsonElement element = object.get(key);
+        if (element == null || element.isJsonNull()) return 0;
+        return element.getAsLong();
+    }
+
+    private static String capitalize(String value) {
+        if (value.isEmpty()) return value;
+        return value.substring(0, 1).toUpperCase(Locale.ROOT) + value.substring(1).replace('-', ' ');
+    }
+
+    public static String compact(long value) {
+        if (value >= 1_000_000_000L) return (value / 1_000_000_000L) + "B";
+        if (value >= 1_000_000L) return (value / 1_000_000L) + "M";
+        if (value >= 1_000L) return (value / 1_000L) + "K";
+        return String.valueOf(value);
+    }
+
+    /** @return the page, or null on a network or parse failure */
+    public static Page search(String curseforgeKey, int platform, String type, String query,
+                              String gameVersion, int sort, int page) {
+        try {
+            if (platform == PLATFORM_CURSEFORGE) {
+                return searchCurseforge(curseforgeKey, type, query, gameVersion, sort, page);
+            }
+            return searchModrinth(type, query, gameVersion, sort, page);
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    private static Page searchModrinth(String type, String query, String gameVersion, int sort, int page) {
+        StringBuilder facets = new StringBuilder("[[\"project_type:").append(type).append("\"]");
+        if (gameVersion != null && !gameVersion.isEmpty()) {
+            facets.append(",[\"versions:").append(gameVersion).append("\"]");
+        }
+        facets.append("]");
+        HashMap<String, Object> params = new HashMap<>();
+        params.put("facets", facets.toString());
+        params.put("query", query == null ? "" : query);
+        params.put("limit", PAGE_SIZE);
+        params.put("index", SORT_KEYS[Math.max(0, Math.min(sort, SORT_KEYS.length - 1))]);
+        params.put("offset", Math.max(0, page - 1) * PAGE_SIZE);
+        JsonObject response = modrinth().get("search", params, JsonObject.class);
+        if (response == null) return null;
+        JsonArray hits = response.getAsJsonArray("hits");
+        if (hits == null) return null;
+        Page result = new Page();
+        result.total = (int) num(response, "total_hits");
+        for (JsonElement element : hits) {
+            JsonObject hit = element.getAsJsonObject();
+            Item item = new Item();
+            item.platform = PLATFORM_MODRINTH;
+            item.type = type;
+            item.id = str(hit, "project_id");
+            item.title = str(hit, "title");
+            item.description = str(hit, "description");
+            item.iconUrl = str(hit, "icon_url");
+            item.author = str(hit, "author");
+            item.downloads = num(hit, "downloads");
+            item.follows = num(hit, "follows");
+            StringBuilder tags = new StringBuilder();
+            JsonArray categories = hit.getAsJsonArray("display_categories");
+            if (categories == null) categories = hit.getAsJsonArray("categories");
+            if (categories != null) {
+                for (JsonElement category : categories) {
+                    if (tags.length() > 0) tags.append("   ");
+                    tags.append(capitalize(category.getAsString()));
+                }
+            }
+            item.tags = tags.toString();
+            result.items.add(item);
+        }
+        return result;
+    }
+
+    private static int curseforgeClass(String type) {
+        switch (type) {
+            case TYPE_RESOURCEPACK:
+                return CF_CLASS_RESOURCEPACK;
+            case TYPE_SHADER:
+                return CF_CLASS_SHADER;
+            case TYPE_SAVES:
+                return CF_CLASS_WORLD;
+            default:
+                return CF_CLASS_MOD;
+        }
+    }
+
+    private static Page searchCurseforge(String key, String type, String query, String gameVersion,
+                                         int sort, int page) {
+        HashMap<String, Object> params = new HashMap<>();
+        params.put("gameId", CF_GAME_ID);
+        params.put("classId", curseforgeClass(type));
+        params.put("searchFilter", query == null ? "" : query);
+        params.put("sortField", CF_SORT[Math.max(0, Math.min(sort, CF_SORT.length - 1))]);
+        params.put("sortOrder", "desc");
+        params.put("pageSize", PAGE_SIZE);
+        params.put("index", Math.max(0, page - 1) * PAGE_SIZE);
+        if (gameVersion != null && !gameVersion.isEmpty()) params.put("gameVersion", gameVersion);
+        JsonObject response = curseforge(key).get("mods/search", params, JsonObject.class);
+        if (response == null) return null;
+        JsonArray data = response.getAsJsonArray("data");
+        if (data == null) return null;
+        Page result = new Page();
+        JsonObject pagination = response.getAsJsonObject("pagination");
+        result.total = pagination == null ? data.size() : (int) Math.min(num(pagination, "totalCount"), 10000L);
+        for (JsonElement element : data) {
+            JsonObject mod = element.getAsJsonObject();
+            Item item = new Item();
+            item.platform = PLATFORM_CURSEFORGE;
+            item.type = type;
+            item.id = str(mod, "id");
+            item.title = str(mod, "name");
+            item.description = str(mod, "summary");
+            JsonElement logo = mod.get("logo");
+            item.iconUrl = (logo != null && logo.isJsonObject()) ? str(logo.getAsJsonObject(), "thumbnailUrl") : "";
+            JsonArray authors = mod.getAsJsonArray("authors");
+            item.author = (authors != null && authors.size() > 0) ? str(authors.get(0).getAsJsonObject(), "name") : "";
+            item.downloads = num(mod, "downloadCount");
+            item.follows = num(mod, "thumbsUpCount");
+            StringBuilder tags = new StringBuilder();
+            JsonArray categories = mod.getAsJsonArray("categories");
+            if (categories != null) {
+                int count = 0;
+                for (JsonElement category : categories) {
+                    if (count++ >= 4) break;
+                    if (tags.length() > 0) tags.append("   ");
+                    tags.append(str(category.getAsJsonObject(), "name"));
+                }
+            }
+            item.tags = tags.toString();
+            result.items.add(item);
+        }
+        return result;
+    }
+
+    /**
+     * Lists downloadable files for a project.
+     * @param loader a mod loader name (fabric, forge, quilt, neoforge) or null for no loader filter
+     * @return the files, or null on a network failure
+     */
+    public static List<FileVersion> versions(String curseforgeKey, Item item, String gameVersion, String loader) {
+        try {
+            if (item.platform == PLATFORM_CURSEFORGE) {
+                return curseforgeFiles(curseforgeKey, item, gameVersion, loader);
+            }
+            return modrinthFiles(item, gameVersion, loader);
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    private static List<FileVersion> modrinthFiles(Item item, String gameVersion, String loader) {
+        HashMap<String, Object> params = new HashMap<>();
+        if (gameVersion != null && !gameVersion.isEmpty()) params.put("game_versions", "[\"" + gameVersion + "\"]");
+        if (loader != null && TYPE_MOD.equals(item.type)) params.put("loaders", "[\"" + loader + "\"]");
+        JsonArray response = params.isEmpty()
+                ? modrinth().get("project/" + item.id + "/version", JsonArray.class)
+                : modrinth().get("project/" + item.id + "/version", params, JsonArray.class);
+        if (response == null) return null;
+        List<FileVersion> result = new ArrayList<>();
+        for (JsonElement element : response) {
+            JsonObject version = element.getAsJsonObject();
+            JsonArray files = version.getAsJsonArray("files");
+            if (files == null || files.size() == 0) continue;
+            JsonObject file = files.get(0).getAsJsonObject();
+            for (JsonElement candidate : files) {
+                JsonObject candidateObject = candidate.getAsJsonObject();
+                JsonElement primary = candidateObject.get("primary");
+                if (primary != null && !primary.isJsonNull() && primary.getAsBoolean()) {
+                    file = candidateObject;
+                    break;
+                }
+            }
+            FileVersion fileVersion = new FileVersion();
+            fileVersion.url = str(file, "url");
+            fileVersion.fileName = str(file, "filename");
+            StringBuilder name = new StringBuilder(str(version, "name"));
+            JsonArray gameVersions = version.getAsJsonArray("game_versions");
+            if (gameVersions != null && gameVersions.size() > 0) {
+                name.append("  (").append(gameVersions.get(0).getAsString());
+                if (gameVersions.size() > 1) name.append("+");
+                name.append(")");
+            }
+            fileVersion.name = name.toString();
+            if (!fileVersion.url.isEmpty()) result.add(fileVersion);
+        }
+        return result;
+    }
+
+    private static int curseforgeLoader(String loader) {
+        if (loader == null) return 0;
+        switch (loader) {
+            case "forge":
+                return 1;
+            case "fabric":
+                return 4;
+            case "quilt":
+                return 5;
+            case "neoforge":
+                return 6;
+            default:
+                return 0;
+        }
+    }
+
+    private static List<FileVersion> curseforgeFiles(String key, Item item, String gameVersion, String loader) {
+        HashMap<String, Object> params = new HashMap<>();
+        params.put("pageSize", 50);
+        if (gameVersion != null && !gameVersion.isEmpty()) params.put("gameVersion", gameVersion);
+        int loaderType = TYPE_MOD.equals(item.type) ? curseforgeLoader(loader) : 0;
+        if (loaderType != 0) params.put("modLoaderType", loaderType);
+        JsonObject response = curseforge(key).get("mods/" + item.id + "/files", params, JsonObject.class);
+        if (response == null) return null;
+        JsonArray data = response.getAsJsonArray("data");
+        if (data == null) return null;
+        List<FileVersion> result = new ArrayList<>();
+        for (JsonElement element : data) {
+            JsonObject file = element.getAsJsonObject();
+            FileVersion fileVersion = new FileVersion();
+            fileVersion.fileName = str(file, "fileName");
+            String url = str(file, "downloadUrl");
+            long fileId = num(file, "id");
+            if (url.isEmpty() && fileId > 0 && !fileVersion.fileName.isEmpty()) {
+                url = "https://edge.forgecdn.net/files/" + (fileId / 1000) + "/" + (fileId % 1000) + "/" + fileVersion.fileName;
+            }
+            StringBuilder name = new StringBuilder(str(file, "displayName"));
+            JsonArray gameVersions = file.getAsJsonArray("gameVersions");
+            if (gameVersions != null) {
+                for (JsonElement gv : gameVersions) {
+                    String text = gv.getAsString();
+                    if (!text.isEmpty() && Character.isDigit(text.charAt(0))) {
+                        name.append("  (").append(text).append(")");
+                        break;
+                    }
+                }
+            }
+            fileVersion.name = name.toString();
+            fileVersion.url = url;
+            if (!url.isEmpty()) result.add(fileVersion);
+        }
+        return result;
+    }
+}

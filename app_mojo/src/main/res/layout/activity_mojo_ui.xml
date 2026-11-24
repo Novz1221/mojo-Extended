@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/m3_bg">
+
+    <!-- Hidden on purpose: this view owns the Microsoft / Ely.by / offline login listeners -->
+    <com.kdt.mcgui.AccountSpinner
+        android:id="@+id/account_spinner"
+        android:layout_width="1dp"
+        android:layout_height="1dp"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:id="@+id/activity_bar"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:background="@color/m3_bg"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="12dp"
+            android:visibility="gone">
+
+            <ImageButton
+                android:id="@+id/bar_back"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:background="@drawable/m3_nav_off"
+                android:contentDescription="@string/m3_back"
+                android:src="@drawable/ic_m3_back"
+                android:tint="@color/m3_text_dim" />
+
+            <ImageButton
+                android:id="@+id/bar_home"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/m3_nav_off"
+                android:contentDescription="@string/m3_home"
+                android:src="@drawable/ic_m3_home"
+                android:tint="@color/m3_text_dim" />
+        </LinearLayout>
+
+        <androidx.fragment.app.FragmentContainerView
+            android:id="@+id/container_fragment"
+            android:name="git.artdeell.mojo.fragments.MainMenuFragment"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <com.kdt.mcgui.ProgressLayout
+            android:id="@+id/progress_layout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:visibility="gone" />
+    </LinearLayout>
+</FrameLayout>
