@@ -667,4 +667,18 @@
     <string name="settings_tab_general">General</string>
     <string name="m3_title_modpack">Download - Modpack</string>
     <string name="m3_import_modpack">Import Modpack</string>
+    <string name="gi_name_hint">Instance name</string>
+    <string name="gi_download">Download</string>
+    <string name="gi_none">None</string>
+    <string name="gi_available">Available</string>
+    <string name="gi_unavailable">Unavailable</string>
+    <string name="gi_loading">Loading…</string>
+    <string name="gi_select_first">Please select the %1$s version first</string>
+    <string name="gi_incompatible">Incompatible with %1$s</string>
+    <string name="gi_install_title">Installing Game</string>
+    <string name="gi_step_prepare">Prepare installation</string>
+    <string name="gi_step_download">Downloading %1$s</string>
+    <string name="gi_step_install">Install game files</string>
+    <string name="gi_cancel">Cancel</string>
+    <string name="gi_done">%1$s installed. Press Launch to play.</string>
 </resources>

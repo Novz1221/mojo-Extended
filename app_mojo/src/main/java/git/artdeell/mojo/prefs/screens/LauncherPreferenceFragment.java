@@ -42,7 +42,6 @@ public class LauncherPreferenceFragment extends PreferenceFragmentCompat impleme
         setDividerHeight(Math.round(3 * density));
         RecyclerView list = getListView();
         list.setClipToPadding(false);
-        git.artdeell.mojo.FluidAnim.animateListIn(list);
         list.setPadding(Math.round(4 * density), Math.round(4 * density),
                 Math.round(12 * density), Math.round(16 * density));
     }
@@ -71,6 +70,7 @@ public class LauncherPreferenceFragment extends PreferenceFragmentCompat impleme
     /** Picks the card shape for every row depending on the neighbours in the list */
     @SuppressLint("RestrictedApi")
     private static class CardGroupAdapter extends PreferenceGroupAdapter {
+        private final long mCreatedAt = android.os.SystemClock.uptimeMillis();
         CardGroupAdapter(PreferenceGroup group) {
             super(group);
         }
@@ -92,7 +92,19 @@ public class LauncherPreferenceFragment extends PreferenceFragmentCompat impleme
             else if (last) background = R.drawable.m3_pref_card_bottom;
             else background = R.drawable.m3_pref_card_mid;
             holder.itemView.setBackgroundResource(background);
-            git.artdeell.mojo.FluidAnim.pressable(holder.itemView);
+            View item = holder.itemView;
+            item.animate().cancel();
+            item.setScaleX(1f);
+            item.setScaleY(1f);
+            if (item.isClickable()) {
+                git.artdeell.mojo.utils.Fluid.pressAll(item);
+            } else {
+                item.setOnTouchListener(null);
+                item.setTag(R.id.fluid_pressed, null);
+            }
+            if (android.os.SystemClock.uptimeMillis() - mCreatedAt < 900) {
+                git.artdeell.mojo.utils.Fluid.itemIn(item, position);
+            }
         }
     }
 

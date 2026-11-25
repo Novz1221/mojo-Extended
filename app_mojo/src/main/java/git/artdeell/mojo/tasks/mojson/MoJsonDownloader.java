@@ -88,10 +88,10 @@ public class MoJsonDownloader extends Downloader {
      * @param realVersion The version ID (necessary)
      * @param listener The download status listener
      */
-    public void start(@Nullable AssetManager assetManager, @Nullable JVersionList.Version version,
+    public java.util.concurrent.Future<?> start(@Nullable AssetManager assetManager, @Nullable JVersionList.Version version,
                       @NonNull String realVersion, // this was there for a reason
                       @NonNull MoJsonExtras.DoneListener listener) {
-        sExecutorService.execute(() -> {
+        return sExecutorService.submit(() -> {
             try {
                 downloadGame(assetManager, version, realVersion);
                 listener.onDownloadDone(mClassPath.toArray(new File[0]));

@@ -400,6 +400,12 @@ public class DownloadFragment extends Fragment {
                 });
     }
 
+    private void openGameInstall(JVersionList.Version version) {
+        Bundle args = new Bundle(1);
+        args.putString(GameInstallFragment.ARG_VERSION, version.id);
+        Tools.swapFragment(requireActivity(), GameInstallFragment.class, GameInstallFragment.TAG, args);
+    }
+
     private class GameAdapter extends RecyclerView.Adapter<GameAdapter.Holder> {
         @NonNull
         @Override
@@ -419,7 +425,7 @@ public class DownloadFragment extends Fragment {
             else label = getString(R.string.m3_chip_old);
             holder.type.setText(label);
             holder.date.setText(formatDate(version.releaseTime));
-            holder.itemView.setOnClickListener(v -> installGameVersion(version));
+            holder.itemView.setOnClickListener(v -> openGameInstall(version));
             Fluid.pressAll(holder.itemView);
             Fluid.itemIn(holder.itemView, position);
             holder.link.setOnClickListener(v -> Tools.openURL(requireActivity(),
