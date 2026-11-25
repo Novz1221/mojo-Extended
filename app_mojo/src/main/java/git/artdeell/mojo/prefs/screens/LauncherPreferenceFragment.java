@@ -96,6 +96,8 @@ public class LauncherPreferenceFragment extends PreferenceFragmentCompat impleme
             item.animate().cancel();
             item.setScaleX(1f);
             item.setScaleY(1f);
+            item.setAlpha(1f);
+            item.setTranslationY(0f);
             if (item.isClickable()) {
                 git.artdeell.mojo.utils.Fluid.pressAll(item);
             } else {
