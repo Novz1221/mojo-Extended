@@ -71,7 +71,7 @@ public class LauncherActivity extends BaseActivity {
         public void onFragmentResumed(@NonNull FragmentManager fm, @NonNull Fragment f) {
             if(f instanceof DialogFragment || f.getParentFragment() != null) return;
             boolean ownHeader = f instanceof MainMenuFragment || f instanceof VersionListFragment
-                    || f instanceof DownloadFragment || f instanceof AccountListFragment;
+                    || f instanceof DownloadFragment || f instanceof GameInstallFragment || f instanceof AccountListFragment;
             Fluid.fade(mHeaderBar, !ownHeader);
         }
     };
