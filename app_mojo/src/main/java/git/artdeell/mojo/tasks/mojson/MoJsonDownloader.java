@@ -98,7 +98,7 @@ public class MoJsonDownloader extends Downloader {
             } catch(JsonParseException e) {
                 listener.onDownloadFailed(e); // Handled separately from the general case because it subclasses RuntimeException. Ugh.
             } catch(RuntimeException e) {
-                throw e; // log fatal errors to Google Play
+                listener.onDownloadFailed(e); // report it, the Future would swallow it
             } catch (InterruptedException ignored) {
             } catch (Exception e) {
                 listener.onDownloadFailed(e);

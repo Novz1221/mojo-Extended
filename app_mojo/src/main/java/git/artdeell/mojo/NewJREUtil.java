@@ -207,8 +207,8 @@ public class NewJREUtil {
             checkInternalRuntime(assetManager, internalRuntime);
         }
 
-        instance.selectedRuntime = appropriateRuntime;
-        instance.write();
+        if (instance != null) instance.selectedRuntime = appropriateRuntime;
+        if (instance != null) instance.write();
     }
 
     private enum InternalRuntime {

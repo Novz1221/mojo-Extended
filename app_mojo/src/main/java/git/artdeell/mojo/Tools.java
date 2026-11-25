@@ -663,7 +663,7 @@ public final class Tools {
 
     public static String getSelectedRuntime(Instance instance) {
         String runtime = LauncherPreferences.PREF_DEFAULT_RUNTIME;
-        String profileRuntime = instance.selectedRuntime;
+        String profileRuntime = instance == null ? null : instance.selectedRuntime;
         if(profileRuntime != null) {
             if(MultiRTUtils.forceReread(profileRuntime).versionString != null) {
                 runtime = profileRuntime;
