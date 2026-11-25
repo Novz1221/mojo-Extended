@@ -45,6 +45,16 @@
                 android:contentDescription="@string/m3_home"
                 android:src="@drawable/ic_m3_home"
                 android:tint="@color/m3_text_dim" />
+
+            <TextView
+                android:id="@+id/bar_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="16dp"
+                android:ellipsize="end"
+                android:singleLine="true"
+                android:textColor="@color/m3_text_dim"
+                android:textSize="16sp" />
         </LinearLayout>
 
         <androidx.fragment.app.FragmentContainerView

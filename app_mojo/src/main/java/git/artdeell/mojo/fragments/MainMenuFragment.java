@@ -26,7 +26,6 @@ import git.artdeell.mojo.extra.ExtraListener;
 import git.artdeell.mojo.instances.Instance;
 import git.artdeell.mojo.instances.InstanceIconProvider;
 import git.artdeell.mojo.instances.Instances;
-import git.artdeell.mojo.prefs.screens.LauncherPreferenceFragment;
 
 /** Landscape home screen: menu tiles on the left, account and launch card on the right. */
 public class MainMenuFragment extends Fragment {
@@ -54,7 +53,7 @@ public class MainMenuFragment extends Fragment {
         mVersionText = view.findViewById(R.id.home_version_text);
 
         view.findViewById(R.id.tile_settings).setOnClickListener(v ->
-                Tools.swapFragment(requireActivity(), LauncherPreferenceFragment.class,
+                Tools.swapFragment(requireActivity(), SettingsHostFragment.class,
                         LauncherActivity.SETTING_FRAGMENT_TAG, null));
         view.findViewById(R.id.tile_download).setOnClickListener(v ->
                 Tools.swapFragment(requireActivity(), DownloadFragment.class, DownloadFragment.TAG, null));

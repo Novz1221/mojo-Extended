@@ -658,4 +658,11 @@
     <string name="m3_installed_to">Installed into the %1$s folder</string>
     <string name="m3_type_release">Release</string>
     <string name="m3_type_snapshot">Snapshot</string>
+    <string name="settings_title_format">Settings - %1$s</string>
+    <string name="settings_tab_video">Renderer</string>
+    <string name="settings_tab_control">Controls</string>
+    <string name="settings_tab_java">Java</string>
+    <string name="settings_tab_misc">Misc</string>
+    <string name="settings_tab_experimental">Experimental</string>
+    <string name="settings_tab_general">General</string>
 </resources>
