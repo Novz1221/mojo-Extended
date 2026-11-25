@@ -102,40 +102,40 @@
 
     <style name="Mojo.Pref" parent="Preference.Material">
         <item name="android:layout">@layout/pref_card</item>
-        <item name="iconSpaceReserved">false</item>
-        <item name="android:iconSpaceReserved">false</item>
+        <item name="iconSpaceReserved">true</item>
+        <item name="android:iconSpaceReserved">true</item>
     </style>
 
     <style name="Mojo.Pref.Category" parent="Preference.Category.Material">
         <item name="android:layout">@layout/pref_card_category</item>
-        <item name="iconSpaceReserved">false</item>
-        <item name="android:iconSpaceReserved">false</item>
+        <item name="iconSpaceReserved">true</item>
+        <item name="android:iconSpaceReserved">true</item>
     </style>
 
     <style name="Mojo.Pref.Switch" parent="Preference.SwitchPreferenceCompat.Material">
         <item name="android:layout">@layout/pref_card</item>
         <item name="android:widgetLayout">@layout/pref_widget_switch_m3</item>
-        <item name="iconSpaceReserved">false</item>
-        <item name="android:iconSpaceReserved">false</item>
+        <item name="iconSpaceReserved">true</item>
+        <item name="android:iconSpaceReserved">true</item>
     </style>
 
     <style name="Mojo.Pref.Dialog" parent="Preference.DialogPreference.Material">
         <item name="android:layout">@layout/pref_card</item>
         <item name="android:widgetLayout">@layout/pref_widget_dropdown</item>
-        <item name="iconSpaceReserved">false</item>
-        <item name="android:iconSpaceReserved">false</item>
+        <item name="iconSpaceReserved">true</item>
+        <item name="android:iconSpaceReserved">true</item>
     </style>
 
     <style name="Mojo.Pref.EditText" parent="Preference.DialogPreference.EditTextPreference.Material">
         <item name="android:layout">@layout/pref_card</item>
-        <item name="iconSpaceReserved">false</item>
-        <item name="android:iconSpaceReserved">false</item>
+        <item name="iconSpaceReserved">true</item>
+        <item name="android:iconSpaceReserved">true</item>
     </style>
 
     <style name="Mojo.Pref.Seek" parent="Preference.SeekBarPreference.Material">
         <item name="android:layout">@layout/pref_card_seekbar</item>
-        <item name="iconSpaceReserved">false</item>
-        <item name="android:iconSpaceReserved">false</item>
+        <item name="iconSpaceReserved">true</item>
+        <item name="android:iconSpaceReserved">true</item>
     </style>
 
     <style name="Mojo.SeekBar.M3" parent="Widget.AppCompat.SeekBar">
@@ -150,9 +150,9 @@
 
     <style name="Mojo.RailItem" parent="">
         <item name="android:layout_width">56dp</item>
-        <item name="android:layout_height">48dp</item>
-        <item name="android:layout_marginTop">4dp</item>
-        <item name="android:layout_marginBottom">4dp</item>
+        <item name="android:layout_height">44dp</item>
+        <item name="android:layout_marginTop">2dp</item>
+        <item name="android:layout_marginBottom">2dp</item>
         <item name="android:background">@drawable/m3_rail_item</item>
         <item name="android:padding">12dp</item>
         <item name="android:scaleType">fitCenter</item>
