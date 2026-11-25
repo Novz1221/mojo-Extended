@@ -27,6 +27,7 @@ import git.artdeell.mojo.R;
 import git.artdeell.mojo.Tools;
 import git.artdeell.mojo.contracts.OpenDocumentWithExtension;
 import git.artdeell.mojo.extra.ExtraConstants;
+import git.artdeell.mojo.utils.Fluid;
 import git.artdeell.mojo.extra.ExtraCore;
 import git.artdeell.mojo.instances.Instance;
 import git.artdeell.mojo.instances.InstanceIconProvider;
@@ -54,6 +55,7 @@ public class VersionListFragment extends Fragment {
     private final List<Instance> mShown = new ArrayList<>();
     private String mSelectedId = "";
     private int mFilter = FILTER_ALL;
+    private boolean mSkipItemAnim = false;
     private RecyclerView mList;
     private TextView mEmpty, mFilterAll, mFilterVanilla, mFilterModdable;
     private InstanceAdapter mAdapter;
@@ -111,6 +113,11 @@ public class VersionListFragment extends Fragment {
         view.findViewById(R.id.vl_add_folder).setOnClickListener(v -> addGameFolder());
         view.findViewById(R.id.vl_cleanup).setOnClickListener(v -> cleanUp());
         updateFilterChips();
+
+        Fluid.pressAll(view);
+        ViewGroup root = (ViewGroup) view;
+        ViewGroup body = (ViewGroup) root.getChildAt(1);
+        Fluid.stagger(root.getChildAt(0), body.getChildAt(0), body.getChildAt(1));
     }
 
     @Override
@@ -161,6 +168,7 @@ public class VersionListFragment extends Fragment {
 
     private void setFilter(int filter) {
         mFilter = filter;
+        Fluid.pop(filter == FILTER_ALL ? mFilterAll : filter == FILTER_VANILLA ? mFilterVanilla : mFilterModdable);
         updateFilterChips();
         applyFilter();
     }
@@ -307,7 +315,9 @@ public class VersionListFragment extends Fragment {
     private void select(Instance instance) {
         Instances.setSelectedInstance(instance);
         mSelectedId = instance.getId();
+        mSkipItemAnim = true;
         mAdapter.notifyDataSetChanged();
+        mList.post(() -> mSkipItemAnim = false);
     }
 
     private void edit(Instance instance) {
@@ -359,6 +369,8 @@ public class VersionListFragment extends Fragment {
             holder.root.setOnClickListener(v -> select(instance));
             holder.edit.setOnClickListener(v -> edit(instance));
             holder.delete.setOnClickListener(v -> delete(instance));
+            Fluid.pressAll(holder.itemView);
+            if (!mSkipItemAnim) Fluid.itemIn(holder.itemView, position);
         }
 
         @Override

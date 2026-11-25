@@ -30,6 +30,7 @@ import git.artdeell.mojo.Tools;
 import git.artdeell.mojo.contentbrowser.ContentApi;
 import git.artdeell.mojo.contentbrowser.ImageLoader;
 import git.artdeell.mojo.extra.ExtraConstants;
+import git.artdeell.mojo.utils.Fluid;
 import git.artdeell.mojo.extra.ExtraCore;
 import git.artdeell.mojo.instances.Instance;
 import git.artdeell.mojo.instances.Instances;
@@ -132,6 +133,10 @@ public class DownloadFragment extends Fragment {
 
         setupGamePanel(view);
         setupContentPanel(view);
+        Fluid.pressAll(view);
+        ViewGroup root = (ViewGroup) view;
+        ViewGroup body = (ViewGroup) root.getChildAt(1);
+        Fluid.stagger(root.getChildAt(0), body.getChildAt(0), body.getChildAt(1));
 
         int startMode = getArguments() == null ? MODE_GAME : getArguments().getInt(ARG_MODE, MODE_GAME);
         setMode(startMode);
@@ -142,6 +147,7 @@ public class DownloadFragment extends Fragment {
         boolean game = mode == MODE_GAME;
         mPanelGame.setVisibility(game ? View.VISIBLE : View.GONE);
         mPanelContent.setVisibility(game ? View.GONE : View.VISIBLE);
+        Fluid.enter(game ? mPanelGame : mPanelContent, 0);
         int titleRes;
         int selectedNav;
         switch (mode) {
@@ -190,6 +196,7 @@ public class DownloadFragment extends Fragment {
             boolean selected = id == selectedId;
             View pill = item.findViewById(getPillId(id));
             pill.setBackgroundResource(selected ? R.drawable.m3_nav_on : R.drawable.m3_nav_off);
+            if (selected) Fluid.pop(pill);
             ImageView icon = item.findViewById(getIconId(id));
             icon.setColorFilter(ContextCompat.getColor(context, selected ? R.color.m3_text : R.color.m3_text_dim));
         }
@@ -224,6 +231,7 @@ public class DownloadFragment extends Fragment {
             mChips[i].setOnClickListener(v -> {
                 mChip = chip;
                 updateChips();
+                Fluid.pop(mChips[chip]);
                 applyGameFilter();
             });
         }
@@ -384,6 +392,8 @@ public class DownloadFragment extends Fragment {
             holder.type.setText(label);
             holder.date.setText(formatDate(version.releaseTime));
             holder.itemView.setOnClickListener(v -> installGameVersion(version));
+            Fluid.pressAll(holder.itemView);
+            Fluid.itemIn(holder.itemView, position);
             holder.link.setOnClickListener(v -> Tools.openURL(requireActivity(),
                     "https://minecraft.wiki/w/Java_Edition_" + version.id.replace(' ', '_')));
         }
@@ -689,6 +699,8 @@ public class DownloadFragment extends Fragment {
             holder.tags.setText(item.tags);
             ImageLoader.load(holder.icon, item.iconUrl, M3Dialog.dp(holder.icon.getContext(), 64));
             holder.itemView.setOnClickListener(v -> openItem(item));
+            Fluid.pressAll(holder.itemView);
+            Fluid.itemIn(holder.itemView, position);
         }
 
         @Override

@@ -9,6 +9,8 @@
         <item name="android:navigationBarColor">@color/background_app</item>
         <item name="preferenceTheme">@style/PreferenceThemeOverlay.v14.Material</item>
         <item name="android:textSize">@dimen/_12ssp</item>
+        <item name="android:windowAnimationStyle">@style/M3ActivityAnim</item>
+        <item name="alertDialogTheme">@style/M3AlertDialog</item>
         <item name="dialogCornerRadius">0dp</item>
         <item name="android:seekBarStyle">@style/MojoLauncher.SeekBar</item>
         <item name="seekBarStyle">@style/MojoLauncher.SeekBar</item>
@@ -70,5 +72,21 @@
         <item name="android:id">@id/dimension_tracker</item>
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">match_parent</item>
+    </style>
+
+    <style name="M3DialogAnim" parent="@android:style/Animation.Dialog">
+        <item name="android:windowEnterAnimation">@anim/m3_dialog_in</item>
+        <item name="android:windowExitAnimation">@anim/m3_dialog_out</item>
+    </style>
+
+    <style name="M3AlertDialog" parent="Theme.AppCompat.Dialog.Alert">
+        <item name="android:windowAnimationStyle">@style/M3DialogAnim</item>
+    </style>
+
+    <style name="M3ActivityAnim" parent="@android:style/Animation.Activity">
+        <item name="android:activityOpenEnterAnimation">@anim/m3_enter</item>
+        <item name="android:activityOpenExitAnimation">@anim/m3_exit</item>
+        <item name="android:activityCloseEnterAnimation">@anim/m3_pop_enter</item>
+        <item name="android:activityCloseExitAnimation">@anim/m3_pop_exit</item>
     </style>
 </resources>

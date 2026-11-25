@@ -261,7 +261,8 @@ public final class Tools {
         // The status bars are completely transparent and will take their color from the inset view
         // background drawable.
         if(!noSystemBars) bgColor = activity.getResources().getColor(R.color.background_status_bar);
-        else bgColor = Color.BLACK;
+        else bgColor = activity instanceof LauncherActivity
+                ? activity.getResources().getColor(R.color.m3_bg) : Color.BLACK;
 
         // On API 35 onwards, apps are edge-to-edge by default and are controlled entirely though the
         // inset API. On levels below, we still need to set the correct cutout mode.
@@ -739,6 +740,7 @@ public final class Tools {
         //TODO handle custom animations
         fragmentActivity.getSupportFragmentManager().beginTransaction()
                 .setReorderingAllowed(true)
+                .setCustomAnimations(R.anim.m3_enter, R.anim.m3_exit, R.anim.m3_pop_enter, R.anim.m3_pop_exit)
                 .addToBackStack(fragmentClass.getName())
                 .replace(R.id.container_fragment, fragmentClass, bundle, fragmentTag).commit();
     }

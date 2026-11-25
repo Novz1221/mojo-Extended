@@ -20,6 +20,7 @@ import git.artdeell.mojo.authenticator.accounts.Account;
 import git.artdeell.mojo.authenticator.accounts.Accounts;
 import git.artdeell.mojo.authenticator.accounts.Wardrobe;
 import git.artdeell.mojo.extra.ExtraConstants;
+import git.artdeell.mojo.utils.Fluid;
 import git.artdeell.mojo.extra.ExtraCore;
 import git.artdeell.mojo.extra.ExtraListener;
 import git.artdeell.mojo.instances.Instance;
@@ -73,6 +74,14 @@ public class MainMenuFragment extends Fragment {
 
         ExtraCore.addExtraListener(ExtraConstants.ACCOUNTS_CHANGED, mRefreshListener);
         ExtraCore.addExtraListener(ExtraConstants.REFRESH_VERSION_SPINNER, mRefreshListener);
+
+        Fluid.pressAll(view);
+        android.view.ViewGroup root = (android.view.ViewGroup) view;
+        android.view.ViewGroup left = (android.view.ViewGroup) root.getChildAt(0);
+        android.view.ViewGroup right = (android.view.ViewGroup) root.getChildAt(2);
+        android.view.ViewGroup panel = (android.view.ViewGroup) left.getChildAt(1);
+        Fluid.stagger(left.getChildAt(0), panel.getChildAt(0), panel.getChildAt(1),
+                right.getChildAt(0), right.getChildAt(1));
     }
 
     private void openVersions() {

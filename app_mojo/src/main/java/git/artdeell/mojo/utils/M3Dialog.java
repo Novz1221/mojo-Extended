@@ -76,12 +76,16 @@ public final class M3Dialog {
         Window window = dialog.getWindow();
         if (window != null) {
             window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            window.setWindowAnimations(R.style.M3DialogAnim);
+            window.setDimAmount(0.6f);
             DisplayMetrics metrics = context.getResources().getDisplayMetrics();
             int width = Math.min((int) (metrics.widthPixels * widthFraction), dp(context, 520));
             window.setLayout(width, WindowManager.LayoutParams.WRAP_CONTENT);
             window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         }
         dialog.show();
+        // Listeners are attached right after show(), so wait one frame before adding press feedback
+        content.post(() -> Fluid.pressAll(content));
         return dialog;
     }
 

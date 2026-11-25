@@ -51,6 +51,7 @@ import git.artdeell.mojo.services.ProgressServiceKeeper;
 import git.artdeell.mojo.tasks.mojson.MoJsonExtras;
 import git.artdeell.mojo.tasks.AsyncVersionList;
 import git.artdeell.mojo.tasks.mojson.MoJsonDownloader;
+import git.artdeell.mojo.utils.Fluid;
 import git.artdeell.mojo.utils.NotificationUtils;
 
 public class LauncherActivity extends BaseActivity {
@@ -70,7 +71,7 @@ public class LauncherActivity extends BaseActivity {
             if(f instanceof DialogFragment || f.getParentFragment() != null) return;
             boolean ownHeader = f instanceof MainMenuFragment || f instanceof VersionListFragment
                     || f instanceof DownloadFragment || f instanceof AccountListFragment;
-            mHeaderBar.setVisibility(ownHeader ? View.GONE : View.VISIBLE);
+            Fluid.fade(mHeaderBar, !ownHeader);
         }
     };
 
@@ -140,12 +141,12 @@ public class LauncherActivity extends BaseActivity {
     };
     @Override
     protected boolean shouldIgnoreNotch() {
-        return getResources().getConfiguration().orientation == ORIENTATION_PORTRAIT;
+        return false;
     }
 
     @Override
     public boolean setFullscreen() {
-        return false;
+        return true;
     }
 
     @Override
@@ -181,6 +182,7 @@ public class LauncherActivity extends BaseActivity {
         ProgressKeeper.addTaskCountListener(mDoubleLaunchPreventionListener);
         ProgressKeeper.addTaskCountListener((mProgressServiceKeeper = new ProgressServiceKeeper(this)));
 
+        Fluid.pressAll(mHeaderBar);
         mHeaderBar.findViewById(R.id.bar_back).setOnClickListener(v -> onBackPressed());
         mHeaderBar.findViewById(R.id.bar_home).setOnClickListener(v -> {
             if(!getSupportFragmentManager().isStateSaved()) Tools.backToMainMenu(this);

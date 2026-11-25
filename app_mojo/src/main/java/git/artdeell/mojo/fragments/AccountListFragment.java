@@ -35,6 +35,7 @@ import git.artdeell.mojo.authenticator.accounts.Account;
 import git.artdeell.mojo.authenticator.accounts.Accounts;
 import git.artdeell.mojo.authenticator.accounts.Wardrobe;
 import git.artdeell.mojo.extra.ExtraConstants;
+import git.artdeell.mojo.utils.Fluid;
 import git.artdeell.mojo.extra.ExtraCore;
 import git.artdeell.mojo.extra.ExtraListener;
 import git.artdeell.mojo.utils.M3Dialog;
@@ -52,6 +53,7 @@ public class AccountListFragment extends Fragment {
 
     private final List<Account> mAccounts = new ArrayList<>();
     private int mSelected = 0;
+    private boolean mSkipItemAnim = false;
     private RecyclerView mList;
     private TextView mEmpty;
     private ImageView mPreview;
@@ -90,6 +92,11 @@ public class AccountListFragment extends Fragment {
         ExtraCore.addExtraListener(ExtraConstants.ACCOUNTS_CHANGED, mChangedListener);
         mPreview.setImageBitmap(Wardrobe.body(requireContext(), null));
         reload();
+
+        Fluid.pressAll(view);
+        ViewGroup root = (ViewGroup) view;
+        ViewGroup body = (ViewGroup) root.getChildAt(1);
+        Fluid.stagger(root.getChildAt(0), body.getChildAt(0), body.getChildAt(1));
     }
 
     @Override
@@ -131,8 +138,11 @@ public class AccountListFragment extends Fragment {
         if (position < 0 || position >= mAccounts.size()) return;
         mSelected = position;
         Accounts.setCurrent(mAccounts.get(position));
+        mSkipItemAnim = true;
         mAdapter.notifyDataSetChanged();
+        mList.post(() -> mSkipItemAnim = false);
         updatePreview();
+        Fluid.pop(mPreview);
     }
 
     private void showAddDialog() {
@@ -281,6 +291,8 @@ public class AccountListFragment extends Fragment {
             holder.itemView.setOnClickListener(v -> select(holder.getAdapterPosition()));
             holder.refresh.setOnClickListener(v -> refreshAccount(account));
             holder.more.setOnClickListener(v -> showMenu(v, holder.getAdapterPosition()));
+            Fluid.pressAll(holder.itemView);
+            if (!mSkipItemAnim) Fluid.itemIn(holder.itemView, position);
         }
 
         @Override
