@@ -34,6 +34,7 @@ import git.artdeell.mojo.extra.ExtraCore;
 import git.artdeell.mojo.extra.ExtraListener;
 import git.artdeell.mojo.fragments.AccountListFragment;
 import git.artdeell.mojo.fragments.DownloadFragment;
+import git.artdeell.mojo.fragments.GameInstallFragment;
 import git.artdeell.mojo.fragments.MainMenuFragment;
 import git.artdeell.mojo.fragments.VersionListFragment;
 import git.artdeell.mojo.fragments.MicrosoftLoginFragment;

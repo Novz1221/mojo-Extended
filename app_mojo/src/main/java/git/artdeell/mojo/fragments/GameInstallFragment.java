@@ -269,6 +269,7 @@ public class GameInstallFragment extends Fragment {
         final InstallUi ui = new InstallUi(context, label);
         final ProgressListener listener = ui.listener(appContext);
         ProgressKeeper.addListener(ProgressLayout.DOWNLOAD_GAME, listener);
+        ProgressKeeper.addListener(ProgressLayout.UNPACK_RUNTIME, listener);
         ui.cancel.setOnClickListener(v -> {
             mCancelled = true;
             Future<?> running = mDownload;
@@ -349,6 +350,7 @@ public class GameInstallFragment extends Fragment {
 
     private void cleanup(InstallUi ui, ProgressListener listener) {
         ProgressKeeper.removeListener(ProgressLayout.DOWNLOAD_GAME, listener);
+        ProgressKeeper.removeListener(ProgressLayout.UNPACK_RUNTIME, listener);
         ui.dismiss();
     }
 
