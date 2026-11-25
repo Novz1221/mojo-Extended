@@ -58,7 +58,7 @@ public class SettingsHostFragment extends Fragment {
             final int index = i;
             mButtons[i] = view.findViewById(TABS[i].buttonId);
             mButtons[i].setOnClickListener(v -> {
-                if (index != mCurrent) showTab(index, true);
+                if (index != mCurrent) { git.artdeell.mojo.FluidAnim.bounce(v); showTab(index, true); }
             });
         }
 
@@ -71,13 +71,16 @@ public class SettingsHostFragment extends Fragment {
     }
 
     private void showTab(int index, boolean replace) {
+        int previous = mCurrent;
         mCurrent = index;
         for (int i = 0; i < mButtons.length; i++) mButtons[i].setSelected(i == index);
         updateTitle();
         if (!replace) return;
         getChildFragmentManager().beginTransaction()
                 .setReorderingAllowed(true)
-                .setCustomAnimations(android.R.animator.fade_in, android.R.animator.fade_out)
+                .setCustomAnimations(
+                        previous > index ? R.anim.m3_tab_enter_up : R.anim.m3_tab_enter_down,
+                        previous > index ? R.anim.m3_tab_exit_down : R.anim.m3_tab_exit_up)
                 .replace(R.id.settings_container, TABS[index].fragmentClass, null, CHILD_TAG)
                 .commit();
     }

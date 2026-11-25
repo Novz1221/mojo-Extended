@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<selector xmlns:android="http://schemas.android.com/apk/res/android">
+<selector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:enterFadeDuration="160"
+    android:exitFadeDuration="160">
     <item android:state_checked="true">
         <layer-list>
             <item android:width="24dp" android:height="24dp" android:gravity="center">

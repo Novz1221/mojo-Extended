@@ -42,6 +42,7 @@ public class LauncherPreferenceFragment extends PreferenceFragmentCompat impleme
         setDividerHeight(Math.round(3 * density));
         RecyclerView list = getListView();
         list.setClipToPadding(false);
+        git.artdeell.mojo.FluidAnim.animateListIn(list);
         list.setPadding(Math.round(4 * density), Math.round(4 * density),
                 Math.round(12 * density), Math.round(16 * density));
     }
@@ -91,6 +92,7 @@ public class LauncherPreferenceFragment extends PreferenceFragmentCompat impleme
             else if (last) background = R.drawable.m3_pref_card_bottom;
             else background = R.drawable.m3_pref_card_mid;
             holder.itemView.setBackgroundResource(background);
+            git.artdeell.mojo.FluidAnim.pressable(holder.itemView);
         }
     }
 
