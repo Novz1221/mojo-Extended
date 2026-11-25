@@ -1,7 +1,9 @@
 package git.artdeell.mojo.fragments;
 
+import android.content.ContentResolver;
 import android.content.Context;
 import android.graphics.drawable.Drawable;
+import android.net.Uri;
 import android.os.Bundle;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
@@ -13,6 +15,8 @@ import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
@@ -34,11 +38,18 @@ import git.artdeell.mojo.utils.Fluid;
 import git.artdeell.mojo.extra.ExtraCore;
 import git.artdeell.mojo.instances.Instance;
 import git.artdeell.mojo.instances.Instances;
+import git.artdeell.mojo.modding.modpacks.api.CommonApi;
+import git.artdeell.mojo.modding.modpacks.api.ModpackApi;
+import git.artdeell.mojo.modding.modpacks.models.Constants;
+import git.artdeell.mojo.modding.modpacks.models.ModDetail;
+import git.artdeell.mojo.modding.modpacks.models.ModItem;
 import git.artdeell.mojo.tasks.AsyncVersionList;
 import git.artdeell.mojo.utils.DownloadUtils;
 import git.artdeell.mojo.utils.FileUtils;
 import git.artdeell.mojo.utils.M3Dialog;
 import git.artdeell.mojo.utils.profiles.VersionSelectorDialog;
+
+import org.apache.commons.io.IOUtils;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -65,6 +76,7 @@ public class DownloadFragment extends Fragment {
     public static final String TAG = "DownloadFragment";
     public static final String ARG_MODE = "mode";
 
+    public static final int MODE_MODPACK = 5;
     private static final int MODE_GAME = 0, MODE_MOD = 1, MODE_RESOURCE = 2, MODE_SAVES = 3, MODE_SHADER = 4;
     private static final int CHIP_RELEASE = 0, CHIP_SNAPSHOT = 1, CHIP_APRIL = 2, CHIP_OLD = 3;
     private static final Set<String> APRIL_FOOLS = new HashSet<>(Arrays.asList(
@@ -97,6 +109,16 @@ public class DownloadFragment extends Fragment {
     private ContentAdapter mContentAdapter;
     private final List<ContentApi.Item> mItems = new ArrayList<>();
     private TextView mTitle;
+    private View mImportModpack;
+    private ModpackApi mModpackApi;
+
+    private final ActivityResultLauncher<String> mImportLauncher =
+            registerForActivityResult(new ActivityResultContracts.GetContent(), uri -> {
+                if (uri == null || getContext() == null) return;
+                Context context = requireContext().getApplicationContext();
+                ContentResolver resolver = context.getContentResolver();
+                MojoApplication.sExecutorService.execute(() -> importLocalModpack(uri, context, resolver));
+            });
 
     public DownloadFragment() {
         super(R.layout.fragment_download);
@@ -104,6 +126,8 @@ public class DownloadFragment extends Fragment {
 
     private static String type(int mode) {
         switch (mode) {
+            case MODE_MODPACK:
+                return ContentApi.TYPE_MODPACK;
             case MODE_RESOURCE:
                 return ContentApi.TYPE_RESOURCEPACK;
             case MODE_SHADER:
@@ -124,8 +148,7 @@ public class DownloadFragment extends Fragment {
         mPanelContent = view.findViewById(R.id.panel_content);
 
         view.findViewById(R.id.nav_game).setOnClickListener(v -> setMode(MODE_GAME));
-        view.findViewById(R.id.nav_modpack).setOnClickListener(v ->
-                Tools.swapFragment(requireActivity(), SearchModFragment.class, SearchModFragment.TAG, null));
+        view.findViewById(R.id.nav_modpack).setOnClickListener(v -> setMode(MODE_MODPACK));
         view.findViewById(R.id.nav_mod).setOnClickListener(v -> setMode(MODE_MOD));
         view.findViewById(R.id.nav_resource).setOnClickListener(v -> setMode(MODE_RESOURCE));
         view.findViewById(R.id.nav_saves).setOnClickListener(v -> setMode(MODE_SAVES));
@@ -151,6 +174,10 @@ public class DownloadFragment extends Fragment {
         int titleRes;
         int selectedNav;
         switch (mode) {
+            case MODE_MODPACK:
+                titleRes = R.string.m3_title_modpack;
+                selectedNav = R.id.nav_modpack;
+                break;
             case MODE_MOD:
                 titleRes = R.string.m3_title_mod;
                 selectedNav = R.id.nav_mod;
@@ -173,6 +200,7 @@ public class DownloadFragment extends Fragment {
                 break;
         }
         mTitle.setText(titleRes);
+        mImportModpack.setVisibility(mode == MODE_MODPACK ? View.VISIBLE : View.GONE);
         updateNav(selectedNav);
         if (game) {
             loadGameVersions(false);
@@ -425,6 +453,10 @@ public class DownloadFragment extends Fragment {
         mPageText = view.findViewById(R.id.dl_page_text);
         mContentStatus = view.findViewById(R.id.dl_content_status);
         mPlatformValue = view.findViewById(R.id.dl_platform_value);
+        mImportModpack = view.findViewById(R.id.dl_import_modpack);
+        mImportModpack.setOnClickListener(v -> {
+            if (ProgressLayout.ensureNoOngoingTasks(requireContext())) mImportLauncher.launch("*/*");
+        });
         mSortValue = view.findViewById(R.id.dl_sort_value);
         mContentList = view.findViewById(R.id.dl_content_list);
         mContentAdapter = new ContentAdapter();
@@ -590,7 +622,71 @@ public class DownloadFragment extends Fragment {
         }
     }
 
+    private ModpackApi modpackApi(Context context) {
+        if (mModpackApi == null) mModpackApi = new CommonApi(context.getString(R.string.curseforge_api_key));
+        return mModpackApi;
+    }
+
+    private void openModpack(ContentApi.Item item) {
+        Context context = requireContext();
+        if (!ProgressLayout.ensureNoOngoingTasks(context)) return;
+        Toast.makeText(context, R.string.m3_loading, Toast.LENGTH_SHORT).show();
+        final ModpackApi api = modpackApi(context);
+        final ModItem modItem = new ModItem(
+                item.platform == ContentApi.PLATFORM_CURSEFORGE ? Constants.SOURCE_CURSEFORGE : Constants.SOURCE_MODRINTH,
+                true, item.id, item.title, item.description, item.iconUrl);
+        MojoApplication.sExecutorService.execute(() -> {
+            ModDetail loaded = null;
+            try {
+                loaded = api.getModDetails(modItem);
+            } catch (RuntimeException ignored) {
+                // Falls through to the "no files" message
+            }
+            final ModDetail detail = loaded;
+            Tools.runOnUiThread(() -> {
+                if (!isAdded()) return;
+                if (detail == null || detail.versionNames == null || detail.versionNames.length == 0) {
+                    Toast.makeText(context, R.string.m3_no_files, Toast.LENGTH_LONG).show();
+                    return;
+                }
+                CharSequence[] names = new CharSequence[detail.versionNames.length];
+                for (int i = 0; i < names.length; i++) names[i] = detail.versionNames[i];
+                M3Dialog.choose(context, item.title, names, -1, index ->
+                        api.handleModpackInstallation(context.getApplicationContext(), detail, index));
+            });
+        });
+    }
+
+    private void importLocalModpack(Uri uri, Context context, ContentResolver resolver) {
+        String fileName = Tools.getFileName(context, uri);
+        if (fileName == null) return;
+        File outFile = new File(Tools.DIR_CACHE, fileName + ".cf");
+        ProgressLayout.setProgress(ProgressLayout.INSTALL_MODPACK, R.string.multirt_progress_caching);
+        try (InputStream in = resolver.openInputStream(uri); OutputStream out = new FileOutputStream(outFile)) {
+            if (in == null) return;
+            IOUtils.copy(in, out);
+            out.flush();
+        } catch (IOException e) {
+            Tools.showErrorRemote("Error", e);
+            ProgressLayout.clearProgress(ProgressLayout.INSTALL_MODPACK);
+            return;
+        }
+        try {
+            modpackApi(context).installLocalModpack(fileName, outFile, null);
+        } catch (IOException e) {
+            Tools.showErrorRemote("Error", e);
+        } finally {
+            //noinspection ResultOfMethodCallIgnored
+            outFile.delete();
+            ProgressLayout.clearProgress(ProgressLayout.INSTALL_MODPACK);
+        }
+    }
+
     private void openItem(ContentApi.Item item) {
+        if (ContentApi.TYPE_MODPACK.equals(item.type)) {
+            openModpack(item);
+            return;
+        }
         Context context = requireContext();
         if (!ProgressLayout.ensureNoOngoingTasks(context)) return;
         Toast.makeText(context, R.string.m3_loading, Toast.LENGTH_SHORT).show();

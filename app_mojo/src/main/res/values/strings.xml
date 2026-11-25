@@ -665,4 +665,6 @@
     <string name="settings_tab_misc">Misc</string>
     <string name="settings_tab_experimental">Experimental</string>
     <string name="settings_tab_general">General</string>
+    <string name="m3_title_modpack">Download - Modpack</string>
+    <string name="m3_import_modpack">Import Modpack</string>
 </resources>

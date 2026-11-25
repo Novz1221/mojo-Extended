@@ -16,6 +16,7 @@ public final class ContentApi {
     public static final int PLATFORM_MODRINTH = 0;
     public static final int PLATFORM_CURSEFORGE = 1;
 
+    public static final String TYPE_MODPACK = "modpack";
     public static final String TYPE_MOD = "mod";
     public static final String TYPE_RESOURCEPACK = "resourcepack";
     public static final String TYPE_SHADER = "shader";
@@ -25,6 +26,7 @@ public final class ContentApi {
 
     private static final int CF_GAME_ID = 432;
     private static final int CF_CLASS_MOD = 6;
+    private static final int CF_CLASS_MODPACK = 4471;
     private static final int CF_CLASS_RESOURCEPACK = 12;
     private static final int CF_CLASS_SHADER = 6552;
     private static final int CF_CLASS_WORLD = 17;
@@ -164,6 +166,8 @@ public final class ContentApi {
 
     private static int curseforgeClass(String type) {
         switch (type) {
+            case TYPE_MODPACK:
+                return CF_CLASS_MODPACK;
             case TYPE_RESOURCEPACK:
                 return CF_CLASS_RESOURCEPACK;
             case TYPE_SHADER:

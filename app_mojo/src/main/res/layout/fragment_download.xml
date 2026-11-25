@@ -545,6 +545,21 @@
                         android:tint="@color/m3_text" />
                 </LinearLayout>
 
+                        <TextView
+                            android:id="@+id/dl_import_modpack"
+                            android:layout_width="match_parent"
+                            android:layout_height="56dp"
+                            android:layout_marginBottom="8dp"
+                            android:background="@drawable/m3_card_ripple"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:gravity="center"
+                            android:text="@string/m3_import_modpack"
+                            android:textColor="@color/m3_text"
+                            android:textSize="15sp"
+                            android:textStyle="bold"
+                            android:visibility="gone" />
+
                         <LinearLayout
                             android:id="@+id/dl_platform_card"
                             android:layout_width="match_parent"
