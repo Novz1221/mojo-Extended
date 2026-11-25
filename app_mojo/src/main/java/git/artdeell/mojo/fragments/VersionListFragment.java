@@ -108,7 +108,7 @@ public class VersionListFragment extends Fragment {
         mFilterModdable.setOnClickListener(v -> setFilter(FILTER_MODDABLE));
         view.findViewById(R.id.vl_refresh).setOnClickListener(v -> reload());
         view.findViewById(R.id.vl_install_new).setOnClickListener(v ->
-                Tools.swapFragment(requireActivity(), ProfileTypeSelectFragment.class, ProfileTypeSelectFragment.TAG, null));
+                Tools.swapFragment(requireActivity(), DownloadFragment.class, DownloadFragment.TAG, null));
         view.findViewById(R.id.vl_folder_more).setOnClickListener(v -> showFolderMenu());
         view.findViewById(R.id.vl_add_folder).setOnClickListener(v -> addGameFolder());
         view.findViewById(R.id.vl_cleanup).setOnClickListener(v -> cleanUp());

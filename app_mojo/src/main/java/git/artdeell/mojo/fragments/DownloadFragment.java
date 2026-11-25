@@ -388,7 +388,7 @@ public class DownloadFragment extends Fragment {
                 context.getString(R.string.m3_install), () -> {
                     try {
                         Instance instance = Instances.createInstance(created -> {
-                            created.sharedData = true;
+                            created.sharedData = false;
                             created.versionId = version.id;
                         }, null);
                         Instances.setSelectedInstance(instance);
