@@ -104,9 +104,6 @@ public class LauncherPreferenceFragment extends PreferenceFragmentCompat impleme
                 item.setOnTouchListener(null);
                 item.setTag(R.id.fluid_pressed, null);
             }
-            if (android.os.SystemClock.uptimeMillis() - mCreatedAt < 900) {
-                git.artdeell.mojo.utils.Fluid.itemIn(item, position);
-            }
         }
     }
 
