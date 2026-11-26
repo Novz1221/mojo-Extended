@@ -1,12 +1,17 @@
 package git.artdeell.mojo.prefs.screens;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.os.Build;
+import android.net.Uri;
 import android.os.Bundle;
+import android.os.Environment;
+import android.provider.Settings;
 
 import androidx.activity.result.ActivityResultLauncher;
+import androidx.appcompat.app.AlertDialog;
 import androidx.preference.ListPreference;
 import androidx.preference.Preference;
 import androidx.preference.SwitchPreferenceCompat;
@@ -16,6 +21,7 @@ import git.artdeell.mojo.R;
 
 import git.artdeell.mojo.contracts.OpenDocumentWithExtension;
 import git.artdeell.mojo.game.renderer.RendererCache;
+import git.artdeell.mojo.game.renderer.def.Renderers;
 import git.artdeell.mojo.game.renderer.extra.GLESProvider;
 import git.artdeell.mojo.prefs.CustomSeekBarPreference;
 import git.artdeell.mojo.prefs.LauncherPreferences;
@@ -77,6 +83,10 @@ public class LauncherPreferenceVideoFragment extends LauncherPreferenceFragment 
         RendererCache list = RendererCache.getCompatibleRenderers(getContext());
         rendererListPreference.setEntries(list.rendererDisplayNames);
         rendererListPreference.setEntryValues(list.rendererIds.toArray(new String[0]));
+        rendererListPreference.setOnPreferenceChangeListener((pref, newValue) -> {
+            if (Renderers.MOBILEGLUES_RENDERER.equals(newValue)) askAllFilesAccess();
+            return true;
+        });
 
 
         Preference drivers = requirePreference("manageDrivers");
@@ -113,6 +123,34 @@ public class LauncherPreferenceVideoFragment extends LauncherPreferenceFragment 
         requirePreference("force_vsync", SwitchPreferenceCompat.class)
                 .setVisible(LauncherPreferences.PREF_USE_ALTERNATE_SURFACE);
         updateDriversPref();
+    }
+
+    private boolean hasAllFilesAccess() {
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.R || Environment.isExternalStorageManager();
+    }
+
+    /**
+     * Ask the user to grant all files access, so MobileGlues can read its config from the shared MG folder
+     */
+    private void askAllFilesAccess() {
+        Activity activity = getActivity();
+        if (activity == null || hasAllFilesAccess()) return;
+        new AlertDialog.Builder(activity)
+                .setTitle(R.string.mg_storage_title)
+                .setMessage(R.string.mg_storage_message)
+                .setPositiveButton(R.string.mg_storage_allow, (d, w) -> openAllFilesSettings(activity))
+                .setNegativeButton(R.string.mg_storage_later, null)
+                .show();
+    }
+
+    private void openAllFilesSettings(Activity activity) {
+        try {
+            Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                    Uri.parse("package:" + activity.getPackageName()));
+            startActivity(intent);
+        } catch (Exception e) {
+            startActivity(new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION));
+        }
     }
 
     private void openDriverDialog(){

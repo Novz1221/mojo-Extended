@@ -51,6 +51,11 @@
     <string name="mcl_setting_renderer_gles2_4">Holy GL4ES - (semua versi, cepat)</string>
     <string name="mcl_setting_renderer_vulkan_zink">Zink (Vulkan) - (semua versi, menengah)</string>
     <string name="mcl_setting_renderer_ltw">LTW (OpenGL ES 3) - hanya untuk 1.17+</string>
+    <string name="mcl_setting_renderer_mobileglues">MobileGlues (OpenGL ES 3) - semua versi</string>
+    <string name="mg_storage_title">Izinkan akses ke semua file</string>
+    <string name="mg_storage_message">MobileGlues menyimpan pengaturannya di folder MG pada perangkat kamu. Izinkan akses ke semua file agar launcher bisa membaca pengaturan yang kamu ubah di aplikasi MobileGlues.</string>
+    <string name="mg_storage_allow">Izinkan</string>
+    <string name="mg_storage_later">Nanti saja</string>
     <string name="mcl_setting_veroption_release">Rilis</string>
     <string name="mcl_setting_veroption_snapshot">Snapshot</string>
     <string name="mcl_setting_veroption_oldalpha">Alpha-lama</string>

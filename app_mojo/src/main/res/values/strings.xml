@@ -65,6 +65,11 @@
     <string name="mcl_setting_category_renderer">Renderer</string>
     <string name="mcl_setting_renderer_gles2_4">GL4ES (OpenGL ES 2) - 1.21.4 and lower</string>
     <string name="mcl_setting_renderer_ltw">LTW (OpenGL ES 3) - 1.17+ only</string>
+    <string name="mcl_setting_renderer_mobileglues">MobileGlues (OpenGL ES 3) - all versions</string>
+    <string name="mg_storage_title">Allow access to all files</string>
+    <string name="mg_storage_message">MobileGlues keeps its settings in the MG folder on your device. Allow access to all files so the launcher can read the settings you changed in the MobileGlues app.</string>
+    <string name="mg_storage_allow">Allow</string>
+    <string name="mg_storage_later">Not now</string>
     <string name="mcl_setting_renderer_vulkan_zink">Zink (Vulkan) - all versions</string>
     <string name="mcl_setting_renderer_vulkan_lzink">Legacy Zink (Vulkan) - all versions, low performance</string>
     <string name="mcl_setting_renderer_freedreno_kgsl">Freedreno (KGSL) - all versions</string>
