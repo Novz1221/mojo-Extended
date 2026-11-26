@@ -685,6 +685,7 @@
     <string name="gi_step_download">Downloading %1$s</string>
     <string name="gi_step_install">Install game files</string>
     <string name="gi_cancel">Cancel</string>
+    <string name="gi_installer_starting">Starting the %1$s installer…</string>
     <string name="gi_done">%1$s installed. Press Launch to play.</string>
     <string name="fm_counts">Folders: %1$d  Files: %2$d</string>
     <string name="fm_back">Back</string>

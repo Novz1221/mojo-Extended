@@ -107,6 +107,18 @@ public abstract class ForgelikeUtils {
 
     public abstract String processVersionString(String version);
 
+    /**
+     * Check whether a loader version from the maven metadata belongs to the given Minecraft version
+     */
+    public abstract boolean matchesGameVersion(String loaderVersion, String gameVersion);
+
+    /**
+     * Short name of a loader version to show in the version picker
+     */
+    public String loaderVersionLabel(String loaderVersion) {
+        return loaderVersion;
+    }
+
     public abstract boolean shouldSkipVersion(String version);
 
     public boolean isVersionOrderInversed() {
@@ -152,6 +164,17 @@ public abstract class ForgelikeUtils {
         public boolean shouldSkipVersion(String version) {
             return false;
         }
+
+        @Override
+        public boolean matchesGameVersion(String loaderVersion, String gameVersion) {
+            return loaderVersion.startsWith(gameVersion + "-");
+        }
+
+        @Override
+        public String loaderVersionLabel(String loaderVersion) {
+            int dashIndex = loaderVersion.indexOf('-');
+            return dashIndex == -1 ? loaderVersion : loaderVersion.substring(dashIndex + 1);
+        }
     }
 
     private static class NeoforgeUtils extends ForgelikeUtils {
@@ -172,6 +195,25 @@ public abstract class ForgelikeUtils {
         @Override
         public boolean shouldSkipVersion(String version) {
             return version.startsWith("0");
+        }
+
+        /**
+         * Up to 1.21.x the NeoForge version is "minor.patch.build" (21.1.5 for 1.21.1).
+         * Since 26.1 it carries the whole game version plus the build (26.1.0.5-beta for 26.1).
+         */
+        @Override
+        public boolean matchesGameVersion(String loaderVersion, String gameVersion) {
+            String[] parts = gameVersion.split("\\.");
+            if (parts.length < 2) return false;
+            String prefix;
+            if (parts[0].equals("1")) {
+                String patch = parts.length > 2 ? parts[2] : "0";
+                prefix = parts[1] + "." + patch + ".";
+            } else {
+                String patch = parts.length > 2 ? parts[2] : "0";
+                prefix = parts[0] + "." + parts[1] + "." + patch + ".";
+            }
+            return loaderVersion.startsWith(prefix);
         }
     }
 }

@@ -33,9 +33,11 @@ import git.artdeell.mojo.R;
 import git.artdeell.mojo.Tools;
 import git.artdeell.mojo.contentbrowser.ContentApi;
 import git.artdeell.mojo.instances.Instance;
+import git.artdeell.mojo.instances.InstanceInstaller;
 import git.artdeell.mojo.instances.Instances;
 import git.artdeell.mojo.modding.fabric.FabricVersion;
 import git.artdeell.mojo.modding.fabric.FabriclikeUtils;
+import git.artdeell.mojo.modding.forge.ForgelikeUtils;
 import git.artdeell.mojo.progresskeeper.ProgressKeeper;
 import git.artdeell.mojo.progresskeeper.ProgressListener;
 import git.artdeell.mojo.tasks.mojson.MoJsonDownloader;
@@ -45,7 +47,7 @@ import git.artdeell.mojo.utils.FileUtils;
 import git.artdeell.mojo.utils.Fluid;
 import git.artdeell.mojo.utils.M3Dialog;
 
-/** Version page: pick a mod loader (Fabric or Quilt) and its API, then install the game. */
+/** Version page: pick a mod loader (Fabric, Quilt, Forge or NeoForge) and its API, then install the game. */
 public class GameInstallFragment extends Fragment {
     public static final String TAG = "GameInstallFragment";
     public static final String ARG_VERSION = "version";
@@ -60,6 +62,8 @@ public class GameInstallFragment extends Fragment {
     private Row mFabricApi;
     private Row mQuilt;
     private Row mQuiltApi;
+    private Row mForge;
+    private Row mNeoforge;
     private volatile boolean mCancelled;
     private volatile Future<?> mDownload;
 
@@ -88,12 +92,16 @@ public class GameInstallFragment extends Fragment {
         mFabricApi = new Row(list, R.drawable.ic_fabric, "Fabric API");
         mQuilt = new Row(list, R.drawable.ic_quilt, "Quilt");
         mQuiltApi = new Row(list, R.drawable.ic_quilt, "Quilted Fabric API");
-        for (Row row : new Row[]{mFabric, mFabricApi, mQuilt, mQuiltApi}) {
+        mForge = new Row(list, R.drawable.ic_forge, "Forge");
+        mNeoforge = new Row(list, R.drawable.ic_neoforge, "NeoForge");
+        for (Row row : new Row[]{mFabric, mFabricApi, mQuilt, mQuiltApi, mForge, mNeoforge}) {
             row.view.setOnClickListener(v -> pick(row));
         }
         refresh();
         loadLoader(mFabric, FabriclikeUtils.FABRIC_UTILS);
         loadLoader(mQuilt, FabriclikeUtils.QUILT_UTILS);
+        loadForgelike(mForge, ForgelikeUtils.FORGE_UTILS);
+        loadForgelike(mNeoforge, ForgelikeUtils.NEOFORGE_UTILS);
 
         Fluid.pressAll(view);
         ViewGroup root = (ViewGroup) view;
@@ -111,6 +119,7 @@ public class GameInstallFragment extends Fragment {
         final ImageView arrow;
         final String title;
         final List<String> options = new ArrayList<>();
+        final List<String> values = new ArrayList<>();
         List<ContentApi.FileVersion> files = new ArrayList<>();
         int selected = -1;
         boolean loaded;
@@ -160,8 +169,17 @@ public class GameInstallFragment extends Fragment {
     }
 
     private void refresh() {
-        bind(mFabric, mQuilt.selected >= 0 ? getString(R.string.gi_incompatible, "Quilt") : null);
-        bind(mQuilt, mFabric.selected >= 0 ? getString(R.string.gi_incompatible, "Fabric") : null);
+        Row[] loaders = {mFabric, mQuilt, mForge, mNeoforge};
+        for (Row loader : loaders) {
+            String blocked = null;
+            for (Row other : loaders) {
+                if (other != loader && other.selected >= 0) {
+                    blocked = getString(R.string.gi_incompatible, other.title);
+                    break;
+                }
+            }
+            bind(loader, blocked);
+        }
         bind(mFabricApi, mFabric.selected < 0 ? getString(R.string.gi_select_first, "Fabric") : null);
         bind(mQuiltApi, mQuilt.selected < 0 ? getString(R.string.gi_select_first, "Quilt") : null);
     }
@@ -213,6 +231,35 @@ public class GameInstallFragment extends Fragment {
         });
     }
 
+    private void loadForgelike(Row row, ForgelikeUtils utils) {
+        final String gameVersion = mVersionId;
+        MojoApplication.sExecutorService.execute(() -> {
+            List<String> all = null;
+            try {
+                all = utils.downloadVersions();
+            } catch (IOException ignored) {
+            }
+            final List<String> full = new ArrayList<>();
+            final List<String> names = new ArrayList<>();
+            if (all != null) {
+                // The metadata lists the oldest builds first, show the newest ones on top
+                for (int i = all.size() - 1; i >= 0; i--) {
+                    String version = all.get(i);
+                    if (utils.shouldSkipVersion(version) || !utils.matchesGameVersion(version, gameVersion)) continue;
+                    full.add(version);
+                    names.add(utils.loaderVersionLabel(version));
+                }
+            }
+            Tools.runOnUiThread(() -> {
+                if (!isAdded()) return;
+                row.values.addAll(full);
+                row.options.addAll(names);
+                row.loaded = true;
+                refresh();
+            });
+        });
+    }
+
     private void loadApi(Row row, String slug, String loader) {
         row.requested = true;
         final String gameVersion = mVersionId;
@@ -242,6 +289,13 @@ public class GameInstallFragment extends Fragment {
         final Context appContext = context.getApplicationContext();
         final String typed = mName.getText().toString().trim();
         final String displayName = typed.isEmpty() ? mVersionId : typed;
+
+        final Row forgelikeRow = mForge.selected >= 0 ? mForge : mNeoforge.selected >= 0 ? mNeoforge : null;
+        if (forgelikeRow != null) {
+            ForgelikeUtils forgelike = forgelikeRow == mForge ? ForgelikeUtils.FORGE_UTILS : ForgelikeUtils.NEOFORGE_UTILS;
+            installForgelike(appContext, displayName, forgelike, forgelikeRow.values.get(forgelikeRow.selected));
+            return;
+        }
 
         final FabriclikeUtils utils;
         final String loaderVersion;
@@ -305,6 +359,30 @@ public class GameInstallFragment extends Fragment {
                         });
             } catch (Exception e) {
                 fail(appContext, ui, listener, e);
+            }
+        });
+    }
+
+    /** Forge and NeoForge are set up by their own installer, which runs after the instance is created. */
+    private void installForgelike(Context appContext, String displayName, ForgelikeUtils utils, String fullVersion) {
+        mCancelled = false;
+        MojoApplication.sExecutorService.execute(() -> {
+            try {
+                InstanceInstaller installer = utils.createInstaller(fullVersion);
+                Instances.createInstance(created -> {
+                    created.name = displayName;
+                    created.icon = utils.getIconName();
+                    created.installer = installer;
+                    created.sharedData = false; // game folder lives inside the instance
+                }, fullVersion);
+                installer.start();
+                Tools.runOnUiThread(() -> {
+                    Toast.makeText(appContext, appContext.getString(R.string.gi_installer_starting, utils.getName()),
+                            Toast.LENGTH_LONG).show();
+                    if (isAdded()) Tools.backToMainMenu(requireActivity());
+                });
+            } catch (Exception e) {
+                Tools.showErrorRemote(appContext.getString(R.string.mc_download_failed), e);
             }
         });
     }
