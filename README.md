@@ -1,4 +1,4 @@
-<H1 align="center">MojoLauncher (a.k.a. MJLauncher)</H1>
+<H1 align="center">MojoExtended Unofficial (a.k.a. MJLauncher)</H1>
 
 <a href="./README_RU.md">Readme на русском</a>
 
@@ -8,13 +8,13 @@
 [![GitHub commit activity](https://img.shields.io/github/commit-activity/m/MojoLauncher/MojoLauncher)](https://github.com/MojoLauncher/MojoLauncher/actions)
 [![Discord](https://img.shields.io/discord/1365346109131722753.svg?label=&logo=discord&logoColor=ffffff&color=7389D8&labelColor=6A7EC2)](https://discord.gg/VHdwQFsaGX)
 
-* MojoLauncher is a launcher, based on [PojavLauncher](https://github.com/PojavLauncherTeam/PojavLauncher), that allows you to play Minecraft: Java Edition on your Android device!
+* MojoExtended is a launcher, based on [PojavLauncher][MojoLauncher](https://github.com/PojavLauncherTeam/PojavLauncher), that allows you to play Minecraft: Java Edition on your Android device!
 
 * It can run almost every version of Minecraft, allowing you to use .jar only installers to install modloaders such as [Forge](https://files.minecraftforge.net/) and [Fabric](http://fabricmc.net/) and mods like [OptiFine](https://optifine.net).
 
 ## Navigation
 - [Introduction](#introduction)
-- [Getting MojoLauncher](#getting-mojolauncher)
+- [Getting MojoExtended](#getting-mojoExtended)
 - [Building](#building) 
 - [Current roadmap](#current-roadmap) 
 - [License](#license) 
@@ -30,28 +30,16 @@
 
 You can get MojoLauncher via four methods:
 
-1. You can get the prebuilt app from the [releases section](http://github.com/mojolauncher/mojolauncher/releases).
+ You can get the prebuilt app from the [releases section](http://github.com/mojolauncher/mojolauncher/releases).
 
-2. You can get it from Google Play by clicking on this badge:
-[![Google Play](https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png)](https://play.google.com/store/apps/details?id=git.artdeell.mjlaunch)
-
-3. You can get early builds from [Github Actions](http://github.com/mojolauncher/mojolauncher/actions).
-
-4. You can [build](#building) from source.
-## Building   
-* Build the launcher (it will automatically download all required components)
-```
-./gradlew :app_mojo:assembleDebug
-```
-If you are building on Windows:
-* Replace `./gradlew` with `.\gradlew.bat`
-* Make sure `mojoexec`, `sdl`, `glfw` are symlinked into `app_mojo/src/main/jni/`
 
 ## Current roadmap
 - [x] Instance system in favor of profiles
 - [x] Out-of-the box 1.21.5 support
 - [x] mrpack/CurseForge zip import
 - [x] LTW: enable compute shader/image extensions
+- [x] Added Mobileglues renderer
+- [x] Modify ui like looks modern ui
 - [ ] LTW: resolve issues with Create
 - [ ] LTW: switch to a color-renderable format for framebuffers
 - [ ] Modpack/mod management tool
@@ -59,9 +47,11 @@ If you are building on Windows:
 - [ ] Vintage Story support
 - [ ] Implement common native library standard
 
+
 ## Known Issues
 - Some physical mice may have very slow mouse speed
 - On Holy GL4ES, large texture atlases may be distorted (resulting in stretched/blocky textures in modpacks)
+- The launcher still little buggy
 - Probably more, that's why we have a bug tracker ;) 
 
 ## License
