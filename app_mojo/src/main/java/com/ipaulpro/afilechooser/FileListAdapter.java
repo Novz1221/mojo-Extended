@@ -35,8 +35,8 @@ import git.artdeell.mojo.R;
  */
 public class FileListAdapter extends BaseAdapter {
 
-    private final static int ICON_FOLDER = R.drawable.ic_px_folder;
-    private final static int ICON_FILE = R.drawable.ic_px_file;
+    private final static int ICON_FOLDER = R.drawable.ic_m3_folder;
+    private final static int ICON_FILE = R.drawable.ic_m3_file;
 
     private final LayoutInflater mInflater;
 
@@ -99,22 +99,13 @@ public class FileListAdapter extends BaseAdapter {
     @Override
     public View getView(int position, View convertView, ViewGroup parent) {
         View row = convertView;
-
         if (row == null)
-            row = mInflater.inflate(android.R.layout.simple_list_item_1, parent, false);
+            row = mInflater.inflate(R.layout.item_m3_file, parent, false);
 
-        TextView view = (TextView) row;
-
-        // Get the file at the current position
         final File file = getItem(position);
-
-        // Set the TextView as the file name
-        view.setText(file.getName());
-
+        ((TextView) row.findViewById(R.id.m3f_name)).setText(file.getName());
         // If the item is not a directory, use the file icon
-        int icon = file.isDirectory() ? ICON_FOLDER : ICON_FILE;
-        view.setCompoundDrawablesWithIntrinsicBounds(icon, 0, 0, 0);
-        view.setCompoundDrawablePadding(20);
+        ((ImageView) row.findViewById(R.id.m3f_icon)).setImageResource(file.isDirectory() ? ICON_FOLDER : ICON_FILE);
         return row;
     }
 

@@ -20,6 +20,8 @@ import git.artdeell.mojo.R;
 import git.artdeell.mojo.Tools;
 import git.artdeell.mojo.extra.ExtraConstants;
 import git.artdeell.mojo.extra.ExtraCore;
+import git.artdeell.mojo.utils.Fluid;
+import git.artdeell.mojo.utils.M3Dialog;
 
 import java.io.File;
 public class FileSelectorFragment extends Fragment {
@@ -30,7 +32,7 @@ public class FileSelectorFragment extends Fragment {
     public static final String BUNDLE_SHOW_FOLDER = "show_folder";
     public static final String BUNDLE_ROOT_PATH = "root_path";
 
-    private Button mSelectFolderButton, mCreateFolderButton;
+    private TextView mSelectFolderButton, mCreateFolderButton;
     private FileListView mFileListView;
     private TextView mFilePathView;
 
@@ -58,23 +60,18 @@ public class FileSelectorFragment extends Fragment {
         mFileListView.lockPathAt(new File(mRootPath));
         mFileListView.setDialogTitleListener((title)->mFilePathView.setText(removeLockPath(title)));
         mFileListView.refreshPath();
+        Fluid.pressAll(view);
 
-        mCreateFolderButton.setOnClickListener(v -> {
-            final EditText editText = new EditText(getContext());
-            new AlertDialog.Builder(getContext())
-                    .setTitle(R.string.folder_dialog_insert_name)
-                    .setView(editText)
-                    .setNegativeButton(android.R.string.cancel, null)
-                    .setPositiveButton(R.string.folder_dialog_create, (dialog, which) -> {
-                        File folder = new File(mFileListView.getFullPath(), editText.getText().toString());
-                        boolean success = folder.mkdir();
-                        if(success){
-                            mFileListView.listFileAt(new File(mFileListView.getFullPath(),editText.getText().toString()));
-                        }else{
-                            mFileListView.refreshPath();
-                        }
-                    }).show();
-        });
+        mCreateFolderButton.setOnClickListener(v -> M3Dialog.input(requireContext(),
+                getString(R.string.folder_dialog_insert_name), getString(R.string.m3_folder_name_hint), null,
+                getString(R.string.folder_dialog_create), text -> {
+                    String name = text.trim();
+                    if (name.isEmpty()) return false;
+                    File folder = new File(mFileListView.getFullPath(), name);
+                    if (folder.mkdir()) mFileListView.listFileAt(folder);
+                    else mFileListView.refreshPath();
+                    return true;
+                }));
 
         mSelectFolderButton.setOnClickListener(v -> {
             ExtraCore.setValue(ExtraConstants.FILE_SELECTOR, removeLockPath(mFileListView.getFullPath().getAbsolutePath()));
@@ -104,9 +101,11 @@ public class FileSelectorFragment extends Fragment {
     }
 
     private void bindViews(@NonNull View view){
+        view.findViewById(R.id.header_back).setOnClickListener(v -> requireActivity().onBackPressed());
+        view.findViewById(R.id.header_home).setOnClickListener(v -> Tools.backToMainMenu(requireActivity()));
         mSelectFolderButton = view.findViewById(R.id.file_selector_select_folder);
         mCreateFolderButton = view.findViewById(R.id.file_selector_create_folder);
         mFileListView = view.findViewById(R.id.file_selector);
-        mFilePathView = view.findViewById(R.id.file_selector_current_path);
+        mFilePathView = view.findViewById(R.id.header_title);
     }
 }

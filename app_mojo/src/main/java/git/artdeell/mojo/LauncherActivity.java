@@ -35,6 +35,7 @@ import git.artdeell.mojo.extra.ExtraListener;
 import git.artdeell.mojo.fragments.AccountListFragment;
 import git.artdeell.mojo.fragments.DownloadFragment;
 import git.artdeell.mojo.fragments.FileManagerFragment;
+import git.artdeell.mojo.fragments.FileSelectorFragment;
 import git.artdeell.mojo.fragments.GameInstallFragment;
 import git.artdeell.mojo.fragments.InstanceEditorFragment;
 import git.artdeell.mojo.fragments.MainMenuFragment;
@@ -74,7 +75,7 @@ public class LauncherActivity extends BaseActivity {
             if(f instanceof DialogFragment || f.getParentFragment() != null) return;
             boolean ownHeader = f instanceof MainMenuFragment || f instanceof VersionListFragment
                     || f instanceof DownloadFragment || f instanceof FileManagerFragment || f instanceof GameInstallFragment || f instanceof AccountListFragment
-                    || f instanceof InstanceEditorFragment;
+                    || f instanceof InstanceEditorFragment || f instanceof FileSelectorFragment;
             Fluid.fade(mHeaderBar, !ownHeader);
         }
     };

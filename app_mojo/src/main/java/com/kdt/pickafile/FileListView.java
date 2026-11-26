@@ -3,6 +3,7 @@ package com.kdt.pickafile;
 import androidx.appcompat.app.*;
 import android.content.*;
 import android.util.*;
+import android.view.View;
 import android.widget.*;
 
 import com.ipaulpro.afilechooser.*;
@@ -76,6 +77,12 @@ public class FileListView extends LinearLayout
         setOrientation(VERTICAL);
 
         mainLv = new ListView(context);
+        float density = context.getResources().getDisplayMetrics().density;
+        mainLv.setDivider(null);
+        mainLv.setDividerHeight(Math.round(4 * density));
+        mainLv.setSelector(android.R.color.transparent);
+        mainLv.setVerticalScrollBarEnabled(false);
+        mainLv.setOverScrollMode(View.OVER_SCROLL_NEVER);
 
         mainLv.setOnItemClickListener((p1, p2, p3, p4) -> {
             // TODO: Implement this method
