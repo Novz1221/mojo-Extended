@@ -328,19 +328,23 @@ public final class ContentVersionPanel {
     }
 
     private void expandPreferred() {
-        if (mPrefVersion == null) return;
+        if (mPrefVersion == null || mPrefVersion.isEmpty()) return;
         Group fallback = null;
+        boolean opened = false;
         for (Group group : mGroups) {
             if (!group.mc.equals(mPrefVersion)) continue;
-            boolean loaderMatches = group.loaderKey.isEmpty() || mPrefLoader == null
-                    || group.loaderKey.equalsIgnoreCase(mPrefLoader);
-            if (loaderMatches) {
+            if (mPrefLoader == null) {
+                group.expanded = true;
+                opened = true;
+                continue;
+            }
+            if (group.loaderKey.isEmpty() || group.loaderKey.equalsIgnoreCase(mPrefLoader)) {
                 group.expanded = true;
                 return;
             }
             if (fallback == null) fallback = group;
         }
-        if (fallback != null) fallback.expanded = true;
+        if (!opened && fallback != null) fallback.expanded = true;
     }
 
     private void applyFilter() {

@@ -113,6 +113,7 @@ public class DownloadFragment extends Fragment {
     private TextView mTitle;
     private View mImportModpack;
     private ModpackApi mModpackApi;
+    private volatile String mTypedVersion = "";
     private ContentVersionPanel mVersionPanel;
     private OnBackPressedCallback mVersionBackCallback;
 
@@ -654,8 +655,13 @@ public class DownloadFragment extends Fragment {
             @Override
             public String[] preferredTarget() {
                 Instance instance = Instances.loadSelectedInstance();
-                if (instance == null) return new String[]{null, null};
-                return new String[]{detectGameVersion(instance.versionId), detectLoader(instance.versionId)};
+                String instanceVersion = instance == null ? null : detectGameVersion(instance.versionId);
+                String instanceLoader = instance == null ? null : detectLoader(instance.versionId);
+                String typed = mTypedVersion;
+                if (typed != null && !typed.isEmpty()) {
+                    return new String[]{typed, typed.equals(instanceVersion) ? instanceLoader : null};
+                }
+                return new String[]{instanceVersion, instanceLoader};
             }
 
             @Override
@@ -812,7 +818,10 @@ public class DownloadFragment extends Fragment {
             holder.desc.setText(item.description);
             holder.tags.setText(item.tags);
             ImageLoader.load(holder.icon, item.iconUrl, M3Dialog.dp(holder.icon.getContext(), 64));
-            holder.itemView.setOnClickListener(v -> mVersionPanel.open(item));
+            holder.itemView.setOnClickListener(v -> {
+                mTypedVersion = mFilterVersion.getText().toString().trim();
+                mVersionPanel.open(item);
+            });
             Fluid.pressAll(holder.itemView);
             Fluid.itemIn(holder.itemView, position);
         }
