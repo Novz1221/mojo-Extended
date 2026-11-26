@@ -381,5 +381,6 @@
     <string name="settings_tab_misc">Lainnya</string>
     <string name="settings_tab_experimental">Eksperimental</string>
     <string name="settings_tab_general">Umum</string>
+    <string name="m3_edit_instance">Ubah Instance</string>
     <string name="m3_shared_data">Data bersama</string>
 </resources>

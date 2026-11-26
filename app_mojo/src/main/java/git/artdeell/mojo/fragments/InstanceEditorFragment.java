@@ -96,6 +96,11 @@ public class InstanceEditorFragment extends Fragment implements CropperUtils.Cro
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         bindViews(view);
 
+        // The screen draws its own header, so the activity hides its back/home bar
+        ((TextView) view.findViewById(R.id.header_title)).setText(R.string.m3_edit_instance);
+        view.findViewById(R.id.header_back).setOnClickListener(v -> requireActivity().onBackPressed());
+        view.findViewById(R.id.header_home).setOnClickListener(v -> Tools.backToMainMenu(requireActivity()));
+
         RendererCache list = RendererCache.getCompatibleRenderers(view.getContext());
         mRenderNames = list.rendererIds;
         mRendererLabels = new ArrayList<>(list.rendererDisplayNames.length + 1);

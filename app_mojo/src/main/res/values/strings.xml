@@ -609,6 +609,7 @@
     <string name="m3_sort_by">Sort By</string>
     <string name="m3_open_page">Open page</string>
     <string name="m3_no_accounts">No accounts available</string>
+    <string name="m3_edit_instance">Edit Instance</string>
     <string name="m3_shared_data">Shared data</string>
     <string name="m3_edit">Edit</string>
     <string name="m3_account_list">Account List</string>

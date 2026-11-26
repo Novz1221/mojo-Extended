@@ -36,6 +36,7 @@ import git.artdeell.mojo.fragments.AccountListFragment;
 import git.artdeell.mojo.fragments.DownloadFragment;
 import git.artdeell.mojo.fragments.FileManagerFragment;
 import git.artdeell.mojo.fragments.GameInstallFragment;
+import git.artdeell.mojo.fragments.InstanceEditorFragment;
 import git.artdeell.mojo.fragments.MainMenuFragment;
 import git.artdeell.mojo.fragments.VersionListFragment;
 import git.artdeell.mojo.fragments.MicrosoftLoginFragment;
@@ -72,7 +73,8 @@ public class LauncherActivity extends BaseActivity {
         public void onFragmentResumed(@NonNull FragmentManager fm, @NonNull Fragment f) {
             if(f instanceof DialogFragment || f.getParentFragment() != null) return;
             boolean ownHeader = f instanceof MainMenuFragment || f instanceof VersionListFragment
-                    || f instanceof DownloadFragment || f instanceof FileManagerFragment || f instanceof GameInstallFragment || f instanceof AccountListFragment;
+                    || f instanceof DownloadFragment || f instanceof FileManagerFragment || f instanceof GameInstallFragment || f instanceof AccountListFragment
+                    || f instanceof InstanceEditorFragment;
             Fluid.fade(mHeaderBar, !ownHeader);
         }
     };
