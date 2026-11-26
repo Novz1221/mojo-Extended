@@ -65,7 +65,7 @@
     <string name="mcl_setting_category_renderer">Renderer</string>
     <string name="mcl_setting_renderer_gles2_4">GL4ES (OpenGL ES 2) - 1.21.4 and lower</string>
     <string name="mcl_setting_renderer_ltw">LTW (OpenGL ES 3) - 1.17+ only</string>
-    <string name="mcl_setting_renderer_mobileglues">MobileGlues (OpenGL ES 3) - all versions</string>
+    <string name="mcl_setting_renderer_mobileglues">MobileGlues - 1.17+ only</string>
     <string name="mg_storage_title">Allow access to all files</string>
     <string name="mg_storage_message">MobileGlues keeps its settings in the MG folder on your device. Allow access to all files so the launcher can read the settings you changed in the MobileGlues app.</string>
     <string name="mg_storage_allow">Allow</string>
@@ -124,8 +124,8 @@
     <string name="control_mouseon">Mouse: on </string>
 
     <!-- MainActivity: Menu advanced controls -->
-    <string name="control_forceclose">Force close</string>
-    <string name="control_viewout">Log output</string>
+    <string name="control_forceclose">FC</string>
+    <string name="control_viewout">Log</string>
     <string name="control_adebug">Input Debug</string>
     <string name="control_customkey">Send custom keycode</string>
 
@@ -549,7 +549,7 @@
     <string name="pref_blocklist_disable_title">Disable server blocklist</string>
     <string name="pref_blocklist_disable_description">Prevent the MC server blocklist from loading. This allows you to play on blocked servers (like 6b6t.org)</string>
     <string name="driver_default_name">Built-in driver</string>
-    <string name="driver_default_extra_name">MJLauncher</string>
+    <string name="driver_default_extra_name">MJExtended</string>
     <string name="driver_config_title">Installed Drivers</string>
     <string name="driver_config_pref_title">Vulkan Driver</string>
     <string name="driver_config_pref_subtitle">Manage installed AdrenoTools Vulkan drivers and install new</string>
