@@ -87,6 +87,16 @@ public final class Fluid {
                 .setDuration(420).setInterpolator(new DecelerateInterpolator(2f)).start();
     }
 
+    /**
+     * Puts a recycled list row back to its resting state. A row that was recycled halfway through
+     * its entrance would otherwise stay transparent or shifted.
+     */
+    public static void settle(View view) {
+        view.animate().cancel();
+        view.setAlpha(1f);
+        view.setTranslationY(0f);
+    }
+
     /** Quick springy pulse, used when something becomes selected. */
     public static void pop(View view) {
         if (view == null) return;

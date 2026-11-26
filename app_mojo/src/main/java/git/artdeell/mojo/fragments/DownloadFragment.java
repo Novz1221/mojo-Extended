@@ -96,8 +96,12 @@ public class DownloadFragment extends Fragment {
     private EditText mGameSearch;
     private TextView mGameStatus;
     private RecyclerView mGameList;
+    /** Rows that play the entrance after the list content changes, matches the stagger limit of Fluid.itemIn */
+    private static final int ENTRANCE_ROWS = 8;
     private final List<JVersionList.Version> mGameShown = new ArrayList<>();
     private GameAdapter mGameAdapter;
+    /** How many of the next bound rows still play the entrance, so rows bound while scrolling do not fade in again */
+    private int mGameAnimLeft;
 
     // Content list state
     private int mPlatform = ContentApi.PLATFORM_MODRINTH;
@@ -109,6 +113,7 @@ public class DownloadFragment extends Fragment {
     private TextView mPageText, mContentStatus, mPlatformValue, mSortValue;
     private RecyclerView mContentList;
     private ContentAdapter mContentAdapter;
+    private int mContentAnimLeft;
     private final List<ContentApi.Item> mItems = new ArrayList<>();
     private TextView mTitle;
     private View mImportModpack;
@@ -374,6 +379,7 @@ public class DownloadFragment extends Fragment {
                 }
             }
         }
+        mGameAnimLeft = ENTRANCE_ROWS;
         mGameAdapter.notifyDataSetChanged();
         mGameStatus.setText(R.string.m3_no_results);
         mGameStatus.setVisibility(mGameShown.isEmpty() ? View.VISIBLE : View.GONE);
@@ -437,7 +443,12 @@ public class DownloadFragment extends Fragment {
             holder.date.setText(formatDate(version.releaseTime));
             holder.itemView.setOnClickListener(v -> openGameInstall(version));
             Fluid.pressAll(holder.itemView);
-            Fluid.itemIn(holder.itemView, position);
+            if (mGameAnimLeft > 0) {
+                mGameAnimLeft--;
+                Fluid.itemIn(holder.itemView, position);
+            } else {
+                Fluid.settle(holder.itemView);
+            }
             holder.link.setOnClickListener(v -> Tools.openURL(requireActivity(),
                     "https://minecraft.wiki/w/Java_Edition_" + version.id.replace(' ', '_')));
         }
@@ -578,6 +589,7 @@ public class DownloadFragment extends Fragment {
                     return;
                 }
                 mItems.addAll(result.items);
+                mContentAnimLeft = ENTRANCE_ROWS;
                 mContentAdapter.notifyDataSetChanged();
                 mContentList.scrollToPosition(0);
                 mTotalPages = (result.total + ContentApi.PAGE_SIZE - 1) / ContentApi.PAGE_SIZE;
@@ -823,7 +835,12 @@ public class DownloadFragment extends Fragment {
                 mVersionPanel.open(item);
             });
             Fluid.pressAll(holder.itemView);
-            Fluid.itemIn(holder.itemView, position);
+            if (mContentAnimLeft > 0) {
+                mContentAnimLeft--;
+                Fluid.itemIn(holder.itemView, position);
+            } else {
+                Fluid.settle(holder.itemView);
+            }
         }
 
         @Override
