@@ -11,7 +11,10 @@ import git.artdeell.mojo.instances.Instances;
 import git.artdeell.mojo.utils.FileUtils;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.io.IOException;
 import java.util.UUID;
 import java.nio.charset.StandardCharsets;
@@ -51,6 +54,39 @@ public final class Wardrobe {
             }
         } catch (IOException ignored) {
             // The launcher preview still works without the copy
+        }
+    }
+
+    /**
+     * Start a local skin server for an offline account that has a saved skin, so the game shows it without mods.
+     *
+     * @return the running server, or null when the account has no saved skin
+     */
+    @Nullable
+    public static LocalSkinServer startSkinServer(Context context, Account account) {
+        if (account.authType != git.artdeell.mojo.authenticator.AuthType.LOCAL) return null;
+        File file = skinFile(context, account);
+        if (!file.isFile()) return null;
+        try {
+            byte[] png = new byte[(int) file.length()];
+            try (FileInputStream in = new FileInputStream(file)) {
+                int offset = 0;
+                while (offset < png.length) {
+                    int read = in.read(png, offset, png.length - offset);
+                    if (read == -1) throw new IOException("Unexpected end of the skin file");
+                    offset += read;
+                }
+            }
+            Bitmap bitmap = BitmapFactory.decodeByteArray(png, 0, png.length);
+            boolean slim = bitmap != null && bitmap.getHeight() == bitmap.getWidth()
+                    && (bitmap.getPixel(bitmap.getWidth() * 55 / 64, bitmap.getHeight() * 20 / 64) >>> 24) == 0;
+            // The game asks for the zero UUID of the local account, servers in offline mode use the name based one
+            Set<String> ids = new LinkedHashSet<>();
+            ids.add(account.profileId.replace("-", "").toLowerCase());
+            ids.add(displayUuid(account).replace("-", "").toLowerCase());
+            return LocalSkinServer.start(account.username, ids, png, slim);
+        } catch (IOException | RuntimeException e) {
+            return null;
         }
     }
 

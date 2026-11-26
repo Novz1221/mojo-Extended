@@ -13,6 +13,8 @@ import git.artdeell.mojo.JVersionList;
 import git.artdeell.mojo.Logger;
 import git.artdeell.mojo.Tools;
 import git.artdeell.mojo.authenticator.accounts.Account;
+import git.artdeell.mojo.authenticator.accounts.LocalSkinServer;
+import git.artdeell.mojo.authenticator.accounts.Wardrobe;
 import git.artdeell.mojo.game.renderer.def.Renderers;
 import git.artdeell.mojo.game.renderer.impl.GLESRenderSpec;
 import git.artdeell.mojo.instances.Instance;
@@ -300,6 +302,10 @@ public class GameRunner {
         javaArgList.add("-Dorg.lwjgl.system.SharedLibraryExtractPath="+lwjglExtractDir.getAbsolutePath());
 
         addAuthlibInjectorArgs(javaArgList, account);
+        LocalSkinServer skinServer = Wardrobe.startSkinServer(activity, account);
+        if (skinServer != null) {
+            javaArgList.add("-javaagent:" + Tools.DIR_DATA + "/authlib-injector/authlib-injector.jar=" + skinServer.url());
+        }
         addNoBlocklistArgs(javaArgList);
 
         mergeMoJsonArgs(javaArgList, getMoJsonJvmArgs(versionId));
