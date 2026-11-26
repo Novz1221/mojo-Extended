@@ -15,6 +15,7 @@ import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.activity.OnBackPressedCallback;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
@@ -32,6 +33,7 @@ import git.artdeell.mojo.MojoApplication;
 import git.artdeell.mojo.R;
 import git.artdeell.mojo.Tools;
 import git.artdeell.mojo.contentbrowser.ContentApi;
+import git.artdeell.mojo.contentbrowser.ContentVersionPanel;
 import git.artdeell.mojo.contentbrowser.ImageLoader;
 import git.artdeell.mojo.extra.ExtraConstants;
 import git.artdeell.mojo.utils.Fluid;
@@ -111,6 +113,8 @@ public class DownloadFragment extends Fragment {
     private TextView mTitle;
     private View mImportModpack;
     private ModpackApi mModpackApi;
+    private ContentVersionPanel mVersionPanel;
+    private OnBackPressedCallback mVersionBackCallback;
 
     private final ActivityResultLauncher<String> mImportLauncher =
             registerForActivityResult(new ActivityResultContracts.GetContent(), uri -> {
@@ -142,7 +146,10 @@ public class DownloadFragment extends Fragment {
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         mTitle = view.findViewById(R.id.header_title);
-        view.findViewById(R.id.header_back).setOnClickListener(v -> requireActivity().onBackPressed());
+        view.findViewById(R.id.header_back).setOnClickListener(v -> {
+            if (mVersionPanel != null && mVersionPanel.isOpen()) mVersionPanel.hide();
+            else requireActivity().onBackPressed();
+        });
         view.findViewById(R.id.header_home).setOnClickListener(v -> Tools.backToMainMenu(requireActivity()));
         mPanelGame = view.findViewById(R.id.panel_game);
         mPanelContent = view.findViewById(R.id.panel_content);
@@ -156,6 +163,7 @@ public class DownloadFragment extends Fragment {
 
         setupGamePanel(view);
         setupContentPanel(view);
+        setupVersionPanel(view);
         Fluid.pressAll(view);
         ViewGroup root = (ViewGroup) view;
         ViewGroup body = (ViewGroup) root.getChildAt(1);
@@ -166,6 +174,7 @@ public class DownloadFragment extends Fragment {
     }
 
     private void setMode(int mode) {
+        if (mVersionPanel != null) mVersionPanel.hide();
         mMode = mode;
         boolean game = mode == MODE_GAME;
         mPanelGame.setVisibility(game ? View.VISIBLE : View.GONE);
@@ -633,32 +642,74 @@ public class DownloadFragment extends Fragment {
         return mModpackApi;
     }
 
-    private void openModpack(ContentApi.Item item) {
+    private void setupVersionPanel(View view) {
+        mVersionBackCallback = new OnBackPressedCallback(false) {
+            @Override
+            public void handleOnBackPressed() {
+                if (mVersionPanel != null) mVersionPanel.hide();
+            }
+        };
+        requireActivity().getOnBackPressedDispatcher().addCallback(getViewLifecycleOwner(), mVersionBackCallback);
+        mVersionPanel = new ContentVersionPanel(this, view.findViewById(R.id.panel_versions), new ContentVersionPanel.Host() {
+            @Override
+            public String[] preferredTarget() {
+                Instance instance = Instances.loadSelectedInstance();
+                if (instance == null) return new String[]{null, null};
+                return new String[]{detectGameVersion(instance.versionId), detectLoader(instance.versionId)};
+            }
+
+            @Override
+            public void onFilePicked(ContentApi.Item item, ContentApi.FileVersion file) {
+                DownloadFragment.this.onFilePicked(item, file);
+            }
+
+            @Override
+            public void openUrl(String url) {
+                Tools.openURL(requireActivity(), url);
+            }
+
+            @Override
+            public void onVisibilityChanged(boolean open) {
+                mVersionBackCallback.setEnabled(open);
+                mPanelContent.setVisibility(open || mMode == MODE_GAME ? View.GONE : View.VISIBLE);
+            }
+        });
+    }
+
+    private void onFilePicked(ContentApi.Item item, ContentApi.FileVersion file) {
         Context context = requireContext();
         if (!ProgressLayout.ensureNoOngoingTasks(context)) return;
-        Toast.makeText(context, R.string.m3_loading, Toast.LENGTH_SHORT).show();
-        final ModpackApi api = modpackApi(context);
+        CharSequence message = file.fileName == null || file.fileName.isEmpty()
+                ? file.name : file.name + "\n" + file.fileName;
+        M3Dialog.confirm(context, item.title, message, context.getString(R.string.m3_download), () -> {
+            if (ContentApi.TYPE_MODPACK.equals(item.type)) installModpackFile(item, file);
+            else installContentFile(item, file);
+        });
+    }
+
+    private void installModpackFile(ContentApi.Item item, ContentApi.FileVersion file) {
+        Context context = requireContext();
         final ModItem modItem = new ModItem(
                 item.platform == ContentApi.PLATFORM_CURSEFORGE ? Constants.SOURCE_CURSEFORGE : Constants.SOURCE_MODRINTH,
                 true, item.id, item.title, item.description, item.iconUrl);
+        String mcVersion = file.gameVersions.isEmpty() ? "" : file.gameVersions.get(0);
+        ModDetail detail = new ModDetail(modItem, new String[]{file.name}, new String[]{mcVersion},
+                new String[]{file.url}, new String[]{file.hash});
+        modpackApi(context).handleModpackInstallation(context.getApplicationContext(), detail, 0);
+    }
+
+    private void installContentFile(ContentApi.Item item, ContentApi.FileVersion file) {
+        Context context = requireContext();
         MojoApplication.sExecutorService.execute(() -> {
-            ModDetail loaded = null;
-            try {
-                loaded = api.getModDetails(modItem);
-            } catch (RuntimeException ignored) {
-                // Falls through to the "no files" message
-            }
-            final ModDetail detail = loaded;
+            Instance instance = Instances.loadSelectedInstance();
+            final File destination = instance == null ? null : new File(instance.getGameDirectory(), folderFor(item.type));
             Tools.runOnUiThread(() -> {
                 if (!isAdded()) return;
-                if (detail == null || detail.versionNames == null || detail.versionNames.length == 0) {
-                    Toast.makeText(context, R.string.m3_no_files, Toast.LENGTH_LONG).show();
+                if (destination == null) {
+                    Toast.makeText(context, R.string.no_instance, Toast.LENGTH_LONG).show();
                     return;
                 }
-                CharSequence[] names = new CharSequence[detail.versionNames.length];
-                for (int i = 0; i < names.length; i++) names[i] = detail.versionNames[i];
-                M3Dialog.choose(context, item.title, names, -1, index ->
-                        api.handleModpackInstallation(context.getApplicationContext(), detail, index));
+                downloadFile(item, file, destination);
             });
         });
     }
@@ -686,45 +737,6 @@ public class DownloadFragment extends Fragment {
             outFile.delete();
             ProgressLayout.clearProgress(ProgressLayout.INSTALL_MODPACK);
         }
-    }
-
-    private void openItem(ContentApi.Item item) {
-        if (ContentApi.TYPE_MODPACK.equals(item.type)) {
-            openModpack(item);
-            return;
-        }
-        Context context = requireContext();
-        if (!ProgressLayout.ensureNoOngoingTasks(context)) return;
-        Toast.makeText(context, R.string.m3_loading, Toast.LENGTH_SHORT).show();
-        final String key = getString(R.string.curseforge_api_key);
-        final String typedVersion = mFilterVersion.getText().toString().trim();
-        MojoApplication.sExecutorService.execute(() -> {
-            Instance instance = Instances.loadSelectedInstance();
-            if (instance == null) {
-                Tools.runOnUiThread(() -> Toast.makeText(context, R.string.no_instance, Toast.LENGTH_LONG).show());
-                return;
-            }
-            String loader = detectLoader(instance.versionId);
-            String gameVersion = detectGameVersion(instance.versionId);
-            if (gameVersion == null) gameVersion = typedVersion;
-            List<ContentApi.FileVersion> files = ContentApi.versions(key, item, gameVersion, loader);
-            if (files != null && files.isEmpty() && gameVersion != null && !gameVersion.isEmpty()) {
-                files = ContentApi.versions(key, item, null, null);
-            }
-            final List<ContentApi.FileVersion> finalFiles = files;
-            final File destination = new File(instance.getGameDirectory(), folderFor(item.type));
-            Tools.runOnUiThread(() -> {
-                if (!isAdded()) return;
-                if (finalFiles == null || finalFiles.isEmpty()) {
-                    Toast.makeText(context, R.string.m3_no_files, Toast.LENGTH_LONG).show();
-                    return;
-                }
-                CharSequence[] names = new CharSequence[finalFiles.size()];
-                for (int i = 0; i < names.length; i++) names[i] = finalFiles.get(i).name;
-                M3Dialog.choose(context, item.title, names, -1, index ->
-                        downloadFile(item, finalFiles.get(index), destination));
-            });
-        });
     }
 
     private void downloadFile(ContentApi.Item item, ContentApi.FileVersion file, File destinationDir) {
@@ -800,7 +812,7 @@ public class DownloadFragment extends Fragment {
             holder.desc.setText(item.description);
             holder.tags.setText(item.tags);
             ImageLoader.load(holder.icon, item.iconUrl, M3Dialog.dp(holder.icon.getContext(), 64));
-            holder.itemView.setOnClickListener(v -> openItem(item));
+            holder.itemView.setOnClickListener(v -> mVersionPanel.open(item));
             Fluid.pressAll(holder.itemView);
             Fluid.itemIn(holder.itemView, position);
         }

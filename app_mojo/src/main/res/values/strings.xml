@@ -722,4 +722,37 @@
     <string name="fm_prop_size">Size</string>
     <string name="fm_prop_modified">Modified</string>
     <string name="fm_prop_contains">Contains</string>
+    <string name="m3_ver_only_release">Show Only MC Releases</string>
+    <string name="m3_ver_search_hint">Search MC Versions</string>
+    <string name="m3_ver_related_links">Related Links</string>
+    <string name="m3_ver_stable">Stable</string>
+    <string name="m3_ver_beta">Beta</string>
+    <string name="m3_ver_alpha">Alpha</string>
+    <string name="m3_ver_no_versions">No versions found. Turn off the release filter or clear the search.</string>
+    <string name="m3_link_page">Project page</string>
+    <string name="m3_link_source">Source code</string>
+    <string name="m3_link_issues">Issue tracker</string>
+    <string name="m3_link_wiki">Wiki</string>
+    <string name="m3_link_discord">Discord</string>
+    <string name="m3_ago_now">just now</string>
+    <plurals name="m3_ago_minutes">
+        <item quantity="one">%d minute ago</item>
+        <item quantity="other">%d minutes ago</item>
+    </plurals>
+    <plurals name="m3_ago_hours">
+        <item quantity="one">%d hour ago</item>
+        <item quantity="other">%d hours ago</item>
+    </plurals>
+    <plurals name="m3_ago_days">
+        <item quantity="one">%d day ago</item>
+        <item quantity="other">%d days ago</item>
+    </plurals>
+    <plurals name="m3_ago_months">
+        <item quantity="one">%d month ago</item>
+        <item quantity="other">%d months ago</item>
+    </plurals>
+    <plurals name="m3_ago_years">
+        <item quantity="one">%d year ago</item>
+        <item quantity="other">%d years ago</item>
+    </plurals>
 </resources>
