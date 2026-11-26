@@ -57,7 +57,7 @@ public class MainMenuFragment extends Fragment {
                         LauncherActivity.SETTING_FRAGMENT_TAG, null));
         view.findViewById(R.id.tile_download).setOnClickListener(v ->
                 Tools.swapFragment(requireActivity(), DownloadFragment.class, DownloadFragment.TAG, null));
-        view.findViewById(R.id.tile_versions).setOnClickListener(v -> openVersions());
+        view.findViewById(R.id.tile_versions).setOnClickListener(v -> openFiles());
         View controls = view.findViewById(R.id.tile_controls);
         controls.setOnClickListener(v -> startActivity(new Intent(requireContext(), CustomControlsActivity.class)));
         controls.setOnLongClickListener(v -> {
@@ -81,6 +81,10 @@ public class MainMenuFragment extends Fragment {
         android.view.ViewGroup panel = (android.view.ViewGroup) left.getChildAt(1);
         Fluid.stagger(left.getChildAt(0), panel.getChildAt(0), panel.getChildAt(1),
                 right.getChildAt(0), right.getChildAt(1));
+    }
+
+    private void openFiles() {
+        Tools.swapFragment(requireActivity(), FileManagerFragment.class, FileManagerFragment.TAG, null);
     }
 
     private void openVersions() {
