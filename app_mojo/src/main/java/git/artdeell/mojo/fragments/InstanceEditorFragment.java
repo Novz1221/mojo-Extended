@@ -7,18 +7,15 @@ import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.ArrayAdapter;
-import android.widget.Button;
-import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.ImageView;
-import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.widget.SwitchCompat;
 import androidx.fragment.app.Fragment;
 
 import git.artdeell.mojo.R;
@@ -29,11 +26,11 @@ import git.artdeell.mojo.game.renderer.RendererCache;
 import git.artdeell.mojo.instances.Instance;
 import git.artdeell.mojo.instances.Instances;
 import git.artdeell.mojo.multirt.MultiRTUtils;
-import git.artdeell.mojo.multirt.RTSpinnerAdapter;
 import git.artdeell.mojo.multirt.Runtime;
 import git.artdeell.mojo.instances.InstanceIconProvider;
 import git.artdeell.mojo.utils.profiles.VersionSelectorDialog;
 import git.artdeell.mojo.utils.CropperUtils;
+import git.artdeell.mojo.utils.M3Dialog;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -45,14 +42,38 @@ public class InstanceEditorFragment extends Fragment implements CropperUtils.Cro
 
     private Instance mInstance;
     private String mSelectedControlLayout;
-    private Button mSaveButton, mDeleteButton, mControlSelectButton, mVersionSelectButton;
-    private Spinner mDefaultRuntime, mDefaultRenderer;
+    private String mVersionId;
+    private View mSaveButton, mDeleteButton;
+    private LoaderRow mVersionRow, mControlRow, mRuntimeRow, mRendererRow;
+    private View mDataRow;
+    private TextView mDataSummary;
     private EditText mDefaultName, mDefaultJvmArgument;
-    private TextView mDefaultVersion, mDefaultControl;
     private ImageView mInstanceIcon;
-    private CheckBox mSharedDataCheckbox;
+    private SwitchCompat mSharedDataSwitch;
     private int mRecommendedIconSize;
     private final ActivityResultLauncher<?> mCropperLauncher = CropperUtils.registerCropper(this, this);
+
+    private List<Runtime> mRuntimes;
+    private int mRuntimeIndex;
+    private int mRendererIndex;
+    private List<String> mRendererLabels;
+
+    /** One selectable row of the editor, made from item_gi_loader */
+    private static final class LoaderRow {
+        final View view;
+        final TextView summary;
+
+        LoaderRow(View root, int iconRes, int titleRes) {
+            view = root;
+            ((ImageView) root.findViewById(R.id.gi_icon)).setImageResource(iconRes);
+            ((TextView) root.findViewById(R.id.gi_title)).setText(titleRes);
+            summary = root.findViewById(R.id.gi_summary);
+        }
+
+        void setSummary(CharSequence text) {
+            summary.setText(text);
+        }
+    }
 
     private List<String> mRenderNames;
 
@@ -77,10 +98,9 @@ public class InstanceEditorFragment extends Fragment implements CropperUtils.Cro
 
         RendererCache list = RendererCache.getCompatibleRenderers(view.getContext());
         mRenderNames = list.rendererIds;
-        List<String> renderList = new ArrayList<>(list.rendererDisplayNames.length + 1);
-        renderList.addAll(Arrays.asList(list.rendererDisplayNames));
-        renderList.add(view.getContext().getString(R.string.global_default));
-        mDefaultRenderer.setAdapter(new ArrayAdapter<>(view.getContext(), R.layout.item_simple_list_1, renderList));
+        mRendererLabels = new ArrayList<>(list.rendererDisplayNames.length + 1);
+        mRendererLabels.addAll(Arrays.asList(list.rendererDisplayNames));
+        mRendererLabels.add(view.getContext().getString(R.string.global_default));
 
         // Set up behaviors
         mSaveButton.setOnClickListener(v -> {
@@ -94,14 +114,24 @@ public class InstanceEditorFragment extends Fragment implements CropperUtils.Cro
             dialogFragment.show(getChildFragmentManager(), "delete_dialog_confirm");
         });
 
-        View.OnClickListener controlSelectListener = getControlSelectListener();
-        mControlSelectButton.setOnClickListener(controlSelectListener);
-        mDefaultControl.setOnClickListener(controlSelectListener);
+        mControlRow.view.setOnClickListener(getControlSelectListener());
+        mVersionRow.view.setOnClickListener(getVersionSelectListener());
 
-        // Setup the expendable list behavior
-        View.OnClickListener versionSelectListener = getVersionSelectListener();
-        mVersionSelectButton.setOnClickListener(versionSelectListener);
-        mDefaultVersion.setOnClickListener(versionSelectListener);
+        mRuntimeRow.view.setOnClickListener(v -> {
+            CharSequence[] names = new CharSequence[mRuntimes.size()];
+            for (int i = 0; i < names.length; i++) names[i] = getRuntimeLabel(i);
+            M3Dialog.choose(v.getContext(), getString(R.string.pedit_java_runtime), names, mRuntimeIndex, index -> {
+                mRuntimeIndex = index;
+                mRuntimeRow.setSummary(getRuntimeLabel(index));
+            });
+        });
+
+        mRendererRow.view.setOnClickListener(v ->
+                M3Dialog.choose(v.getContext(), getString(R.string.pedit_renderer),
+                        mRendererLabels.toArray(new CharSequence[0]), mRendererIndex, index -> {
+                            mRendererIndex = index;
+                            mRendererRow.setSummary(mRendererLabels.get(index));
+                        }));
 
         // Set up the icon change click listener
         mInstanceIcon.setOnClickListener(v -> {
@@ -110,11 +140,11 @@ public class InstanceEditorFragment extends Fragment implements CropperUtils.Cro
             CropperUtils.startCropper(mCropperLauncher);
         });
 
-        mSharedDataCheckbox.setOnCheckedChangeListener((v,checked) ->{
-            mInstance.sharedData = checked;
-            int text = R.string.instance_shared_data_off;
-            if(checked) text = R.string.instance_shared_data_on;
-            mSharedDataCheckbox.setText(text);
+        // The whole row toggles the switch, the switch itself is not clickable
+        mDataRow.setOnClickListener(v -> mSharedDataSwitch.setChecked(!mSharedDataSwitch.isChecked()));
+        mSharedDataSwitch.setOnCheckedChangeListener((v, checked) -> {
+            if (mInstance != null) mInstance.sharedData = checked;
+            mDataSummary.setText(checked ? R.string.instance_shared_data_on : R.string.instance_shared_data_off);
         });
 
         Instance selectedInstance = Instances.loadSelectedInstance();
@@ -139,7 +169,10 @@ public class InstanceEditorFragment extends Fragment implements CropperUtils.Cro
     }
 
     private View.OnClickListener getVersionSelectListener() {
-        return v -> VersionSelectorDialog.open(v.getContext(), false, (id, snapshot)-> mDefaultVersion.setText(id));
+        return v -> VersionSelectorDialog.open(v.getContext(), false, (id, snapshot) -> {
+            mVersionId = id;
+            mVersionRow.setSummary(id);
+        });
     }
 
     private static String nullToEmpty(String in) {
@@ -153,63 +186,80 @@ public class InstanceEditorFragment extends Fragment implements CropperUtils.Cro
                 InstanceIconProvider.fetchIcon(getResources(), instance)
         );
 
-        // Runtime spinner
-        List<Runtime> runtimes = MultiRTUtils.getRuntimes();
+        // Runtime
+        mRuntimes = MultiRTUtils.getRuntimes();
+        mRuntimes.add(new Runtime("<Default>")); // "use the default runtime" entry, always last
         int jvmIndex = -1;
         if(instance.selectedRuntime != null) {
-            jvmIndex = runtimes.indexOf(new Runtime(instance.selectedRuntime));
+            jvmIndex = mRuntimes.indexOf(new Runtime(instance.selectedRuntime));
         }
-        mDefaultRuntime.setAdapter(new RTSpinnerAdapter(context, runtimes));
-        if(jvmIndex == -1) jvmIndex = runtimes.size() - 1;
-        mDefaultRuntime.setSelection(jvmIndex);
+        mRuntimeIndex = jvmIndex == -1 ? mRuntimes.size() - 1 : jvmIndex;
+        mRuntimeRow.setSummary(getRuntimeLabel(mRuntimeIndex));
 
-        // Renderer spinner
+        // Renderer
         int rendererIndex = mRenderNames.indexOf(instance.getLaunchRenderer());
-        if(rendererIndex == -1) {
-            rendererIndex = mDefaultRenderer.getAdapter().getCount() - 1;
-        }
-        mDefaultRenderer.setSelection(rendererIndex);
+        mRendererIndex = rendererIndex == -1 ? mRendererLabels.size() - 1 : rendererIndex;
+        mRendererRow.setSummary(mRendererLabels.get(mRendererIndex));
 
-        mDefaultVersion.setText(instance.versionId);
+        mVersionId = instance.versionId;
+        mVersionRow.setSummary(nullToEmpty(mVersionId));
         mDefaultJvmArgument.setText(nullToEmpty(instance.jvmArgs));
         mDefaultName.setText(nullToEmpty(instance.name));
-        mDefaultControl.setText(mSelectedControlLayout == null ? nullToEmpty(instance.controlLayout) : mSelectedControlLayout);
-        mSharedDataCheckbox.setChecked(instance.sharedData);
+        mSelectedControlLayout = mSelectedControlLayout == null ? instance.controlLayout : mSelectedControlLayout;
+        updateControlSummary();
+        mSharedDataSwitch.setChecked(instance.sharedData);
+        mDataSummary.setText(instance.sharedData ? R.string.instance_shared_data_on : R.string.instance_shared_data_off);
+    }
+
+    private String getRuntimeLabel(int index) {
+        Runtime runtime = mRuntimes.get(index);
+        if (index == mRuntimes.size() - 1) return getString(R.string.global_default);
+        return String.format("%s - %s", runtime.name.replace(".tar.xz", ""),
+                runtime.versionString == null ? getString(R.string.multirt_runtime_corrupt) : runtime.versionString);
+    }
+
+    private void updateControlSummary() {
+        boolean empty = mSelectedControlLayout == null || mSelectedControlLayout.isEmpty();
+        mControlRow.setSummary(empty ? getString(R.string.use_global_default) : mSelectedControlLayout);
     }
 
     private void bindViews(@NonNull View view){
-        mDefaultControl = view.findViewById(R.id.vprof_editor_ctrl_spinner);
-        mDefaultRuntime = view.findViewById(R.id.vprof_editor_spinner_runtime);
-        mDefaultRenderer = view.findViewById(R.id.vprof_editor_instance_renderer);
-        mDefaultVersion = view.findViewById(R.id.vprof_editor_version_spinner);
+        mVersionRow = new LoaderRow(view.findViewById(R.id.vprof_editor_version_row),
+                R.drawable.ic_grass_block, R.string.profiles_profile_version);
+        mControlRow = new LoaderRow(view.findViewById(R.id.vprof_editor_ctrl_row),
+                R.drawable.ic_m3_game, R.string.default_control);
+        mRuntimeRow = new LoaderRow(view.findViewById(R.id.vprof_editor_runtime_row),
+                R.drawable.ic_m3_settings, R.string.pedit_java_runtime);
+        mRendererRow = new LoaderRow(view.findViewById(R.id.vprof_editor_renderer_row),
+                R.drawable.ic_m3_bulb, R.string.pedit_renderer);
 
         mDefaultName = view.findViewById(R.id.vprof_editor_instance_name);
         mDefaultJvmArgument = view.findViewById(R.id.vprof_editor_jre_args);
 
         mSaveButton = view.findViewById(R.id.vprof_editor_save_button);
         mDeleteButton = view.findViewById(R.id.vprof_editor_delete_button);
-        mControlSelectButton = view.findViewById(R.id.vprof_editor_ctrl_button);
-        mVersionSelectButton = view.findViewById(R.id.vprof_editor_version_button);
         mInstanceIcon = view.findViewById(R.id.vprof_editor_instance_icon);
-        mSharedDataCheckbox = view.findViewById(R.id.vprof_editor_data_checkbox_container);
+        mDataRow = view.findViewById(R.id.vprof_editor_data_row);
+        mDataSummary = view.findViewById(R.id.vprof_editor_data_summary);
+        mSharedDataSwitch = view.findViewById(R.id.vprof_editor_data_checkbox_container);
     }
 
     private void save(){
         //First, check for potential issues in the inputs
-        mInstance.versionId = mDefaultVersion.getText().toString();
-        mInstance.controlLayout = mDefaultControl.getText().toString();
+        mInstance.versionId = nullToEmpty(mVersionId);
+        mInstance.controlLayout = nullToEmpty(mSelectedControlLayout);
         mInstance.jvmArgs = mDefaultJvmArgument.getText().toString();
 
         String newName = mDefaultName.getText().toString();
         if(mInstance.controlLayout.isEmpty()) mInstance.controlLayout = null;
         if(mInstance.jvmArgs.isEmpty()) mInstance.jvmArgs = null;
 
-        Runtime selectedRuntime = (Runtime) mDefaultRuntime.getSelectedItem();
+        Runtime selectedRuntime = mRuntimes.get(mRuntimeIndex);
         mInstance.selectedRuntime = (selectedRuntime.name.equals("<Default>") || selectedRuntime.versionString == null)
                 ? null : selectedRuntime.name;
 
-        if(mDefaultRenderer.getSelectedItemPosition() == mRenderNames.size()) mInstance.renderer = null;
-        else mInstance.renderer = mRenderNames.get(mDefaultRenderer.getSelectedItemPosition());
+        if(mRendererIndex == mRenderNames.size()) mInstance.renderer = null;
+        else mInstance.renderer = mRenderNames.get(mRendererIndex);
 
         try {
             if(!newName.isEmpty() && !newName.equals(mInstance.name))
