@@ -65,6 +65,8 @@ public class MainMenuFragment extends Fragment {
             return true;
         });
 
+        view.findViewById(R.id.home_share_log).setOnClickListener(v -> Tools.shareLog(requireContext()));
+
         view.findViewById(R.id.home_account_area).setOnClickListener(v ->
                 Tools.swapFragment(requireActivity(), AccountListFragment.class, AccountListFragment.TAG, null));
         view.findViewById(R.id.home_version_row).setOnClickListener(v -> openVersions());
@@ -79,7 +81,7 @@ public class MainMenuFragment extends Fragment {
         android.view.ViewGroup left = (android.view.ViewGroup) root.getChildAt(0);
         android.view.ViewGroup right = (android.view.ViewGroup) root.getChildAt(2);
         android.view.ViewGroup panel = (android.view.ViewGroup) left.getChildAt(1);
-        Fluid.stagger(left.getChildAt(0), panel.getChildAt(0), panel.getChildAt(1),
+        Fluid.stagger(left.getChildAt(0), panel.getChildAt(0), panel.getChildAt(1), left.getChildAt(2),
                 right.getChildAt(0), right.getChildAt(1));
     }
 

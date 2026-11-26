@@ -633,6 +633,7 @@
     <string name="m3_filter_moddable">Moddable (%1$d)</string>
     <string name="m3_gamepad_mapper">Gamepad mapper</string>
     <string name="m3_folder_name_hint">Folder name</string>
+    <string name="m3_share_log">Share Log</string>
     <string name="m3_select_version">Select version</string>
     <string name="m3_folder_created">New game folder created</string>
     <string name="m3_cleanup_message">Deletes cached and partially downloaded files. Worlds, mods and installed versions are kept.</string>

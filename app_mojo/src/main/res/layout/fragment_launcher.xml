@@ -94,6 +94,24 @@
                     android:src="@drawable/ic_px_gamepad" />
             </LinearLayout>
         </LinearLayout>
+
+        <TextView
+            android:id="@+id/home_share_log"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="14dp"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/m3_button_primary"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:paddingStart="20dp"
+            android:paddingTop="10dp"
+            android:paddingEnd="20dp"
+            android:paddingBottom="10dp"
+            android:text="@string/m3_share_log"
+            android:textColor="@color/m3_on_primary"
+            android:textSize="16sp" />
     </LinearLayout>
 
     <View
