@@ -133,10 +133,34 @@ public class AccountSpinner extends AppCompatSpinner implements LoginListener, A
         mLoginStepAnimator.addUpdateListener(this);
         mLoginStep = mMaxSteps;
 
+    }
+
+    /**
+     * The listeners are tied to the window instead of the constructor. The listener list keeps only weak
+     * references, so the spinner of a destroyed activity stays registered until it is garbage collected.
+     * Every such leftover would handle the same login too, and one offline account became several.
+     */
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        unregisterListeners();
         ExtraCore.addExtraListener(ExtraConstants.MOJANG_LOGIN_TODO, mMojangLoginListener);
         ExtraCore.addExtraListener(ExtraConstants.MICROSOFT_LOGIN_TODO, mMicrosoftLoginListener);
         ExtraCore.addExtraListener(ExtraConstants.ELYBY_LOGIN_TODO, mElyByLoginListener);
         ExtraCore.addExtraListener(ExtraConstants.REFRESH_ACCOUNT_SPINNER, mRefreshAccountsListener);
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        unregisterListeners();
+        super.onDetachedFromWindow();
+    }
+
+    private void unregisterListeners() {
+        ExtraCore.removeExtraListenerFromValue(ExtraConstants.MOJANG_LOGIN_TODO, mMojangLoginListener);
+        ExtraCore.removeExtraListenerFromValue(ExtraConstants.MICROSOFT_LOGIN_TODO, mMicrosoftLoginListener);
+        ExtraCore.removeExtraListenerFromValue(ExtraConstants.ELYBY_LOGIN_TODO, mElyByLoginListener);
+        ExtraCore.removeExtraListenerFromValue(ExtraConstants.REFRESH_ACCOUNT_SPINNER, mRefreshAccountsListener);
     }
 
     private void reload() {
