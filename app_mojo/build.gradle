@@ -78,7 +78,7 @@ android {
     }
 
     defaultConfig {
-        applicationId "git.artdeell.mjlaunch"
+        applicationId "git.artdeell.mjextended"
         minSdkVersion 21
         targetSdkVersion 36
         versionCode getDateSeconds()
@@ -108,7 +108,7 @@ android {
             shrinkResources false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             signingConfig signingConfigs.customDebug
-            resValue 'string', 'application_package', 'git.artdeell.mjlaunch.debug'
+            resValue 'string', 'application_package', 'git.artdeell.mjextended'
             resValue 'string', 'storageProviderAuthorities', 'git.artdeell.mjlaunch.scoped.gamefolder.debug'
         }
         proguard {

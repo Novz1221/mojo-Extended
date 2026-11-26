@@ -110,8 +110,6 @@ public class VersionListFragment extends Fragment {
         view.findViewById(R.id.vl_install_new).setOnClickListener(v ->
                 Tools.swapFragment(requireActivity(), DownloadFragment.class, DownloadFragment.TAG, null));
         view.findViewById(R.id.vl_folder_more).setOnClickListener(v -> showFolderMenu());
-        view.findViewById(R.id.vl_add_folder).setOnClickListener(v -> addGameFolder());
-        view.findViewById(R.id.vl_cleanup).setOnClickListener(v -> cleanUp());
         updateFilterChips();
 
         Fluid.pressAll(view);
@@ -207,8 +205,6 @@ public class VersionListFragment extends Fragment {
                 context.getString(R.string.mcl_button_open_directory),
                 context.getString(R.string.main_share_logs),
                 context.getString(R.string.main_install_jar_file),
-                context.getString(R.string.mcl_tab_wiki),
-                context.getString(R.string.mcl_button_social_media),
                 context.getString(R.string.m3_gamepad_mapper)
         };
         M3Dialog.choose(context, context.getString(R.string.m3_default_game), items, -1, index -> {
@@ -221,12 +217,6 @@ public class VersionListFragment extends Fragment {
                     break;
                 case 2:
                     if (ProgressLayout.ensureNoOngoingTasks(context)) mJarLauncher.launch(null);
-                    break;
-                case 3:
-                    Tools.openURL(requireActivity(), Tools.URL_HOME);
-                    break;
-                case 4:
-                    Tools.openURL(requireActivity(), getString(R.string.social_media_invite));
                     break;
                 default:
                     Tools.swapFragment(requireActivity(), GamepadMapperFragment.class, GamepadMapperFragment.TAG, null);
@@ -247,69 +237,6 @@ public class VersionListFragment extends Fragment {
         } else {
             Toast.makeText(context, R.string.gamedir_open_failed, Toast.LENGTH_LONG).show();
         }
-    }
-
-    /** Creates an instance that keeps its own separate game folder (saves, mods, options). */
-    private void addGameFolder() {
-        Context context = requireContext();
-        M3Dialog.input(context, context.getString(R.string.m3_add_game_folder),
-                context.getString(R.string.m3_folder_name_hint), null,
-                context.getString(android.R.string.ok), text -> {
-                    String name = text.trim();
-                    if (name.isEmpty()) return false;
-                    VersionSelectorDialog.open(context, false, (id, snapshot) -> {
-                        try {
-                            Instance created = Instances.createInstance(instance -> {
-                                instance.sharedData = false;
-                                instance.versionId = id;
-                                instance.name = name;
-                            }, FileUtils.escapeFileName(name));
-                            Instances.setSelectedInstance(created);
-                            Toast.makeText(context, R.string.m3_folder_created, Toast.LENGTH_SHORT).show();
-                            reload();
-                        } catch (IOException e) {
-                            Tools.showError(context, e);
-                        }
-                    });
-                    return true;
-                });
-    }
-
-    private void cleanUp() {
-        Context context = requireContext();
-        if (!ProgressLayout.ensureNoOngoingTasks(context)) return;
-        M3Dialog.confirm(context, context.getString(R.string.m3_cleanup),
-                context.getString(R.string.m3_cleanup_message),
-                context.getString(R.string.m3_cleanup_confirm), () ->
-                        MojoApplication.sExecutorService.execute(() -> {
-                            long freed = 0;
-                            Set<File> targets = new HashSet<>();
-                            targets.add(Tools.DIR_CACHE);
-                            targets.add(new File(Tools.DIR_GAME_HOME, "partfiles"));
-                            for (File target : targets) {
-                                File[] children = target == null ? null : target.listFiles();
-                                if (children == null) continue;
-                                for (File child : children) {
-                                    try {
-                                        if (child.isDirectory()) {
-                                            freed += org.apache.commons.io.FileUtils.sizeOfDirectory(child);
-                                            org.apache.commons.io.FileUtils.deleteDirectory(child);
-                                        } else {
-                                            freed += child.length();
-                                            //noinspection ResultOfMethodCallIgnored
-                                            child.delete();
-                                        }
-                                    } catch (Exception ignored) {
-                                        // Locked or already removed files are skipped
-                                    }
-                                }
-                            }
-                            final long freedBytes = freed;
-                            Tools.runOnUiThread(() -> Toast.makeText(context,
-                                    context.getString(R.string.m3_cleanup_done,
-                                            android.text.format.Formatter.formatShortFileSize(context, freedBytes)),
-                                    Toast.LENGTH_LONG).show());
-                        }));
     }
 
     private void select(Instance instance) {
