@@ -9,6 +9,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -55,6 +56,10 @@ public class SocialFragment extends Fragment {
     private TextView mChatInfo;
     private String mLastKey = "";
     private String mVoiceRoom;
+    private boolean mMuted;
+    private boolean mShowList;
+    private Runnable mVoiceView;
+    private Runnable mBeat;
 
     /** Tiny wrapper so the body container can be swapped */
     private static class FrameLayoutHolder {
@@ -165,7 +170,7 @@ public class SocialFragment extends Fragment {
         mTab = tab;
         for (int i = 0; i < 4; i++) {
             boolean on = i == tab;
-            mTabs[i].setBackgroundResource(on ? R.drawable.m3_chip_on : R.drawable.m3_chip_off);
+            mTabs[i].setBackgroundResource(on ? R.drawable.m3_button_primary : R.drawable.m3_chip_off);
             mTabs[i].setTextColor(color(on ? R.color.m3_on_primary : R.color.m3_text));
         }
         if (!mClient.isConfigured()) {
@@ -200,6 +205,15 @@ public class SocialFragment extends Fragment {
     private void stopPolling() {
         if (mPoll != null) mHandler.removeCallbacks(mPoll);
         mPoll = null;
+        if (mVoiceView != null) mHandler.removeCallbacks(mVoiceView);
+        mVoiceView = null;
+    }
+
+    @Override
+    public void onDestroyView() {
+        stopPolling();
+        if (mVoiceRoom != null) leaveVoice(false);
+        super.onDestroyView();
     }
 
     // ---- setup ----
@@ -448,14 +462,18 @@ public class SocialFragment extends Fragment {
         }
     }
 
-    // ---- voice rooms (presence list only, no audio) ----
+    // ---- voice rooms (presence only, no audio) ----
 
     private View buildVoice() {
+        return mVoiceRoom != null && !mShowList ? buildCall() : buildVoiceList();
+    }
+
+    private View buildVoiceList() {
         LinearLayout c = column();
-        c.setPadding(dp(8), dp(8), dp(8), 0);
+        c.setPadding(dp(8), dp(4), dp(8), 0);
         c.addView(text("Voice Room", 20, R.color.m3_text));
         TextView hint = text("Daftar room dan siapa yang bergabung. Audio langsung belum tersedia.", 13, R.color.m3_text_dim);
-        hint.setPadding(0, dp(4), 0, dp(8));
+        hint.setPadding(0, dp(2), 0, dp(6));
         c.addView(hint);
         LinearLayout list = column();
         ScrollView sv = new ScrollView(requireContext());
@@ -470,11 +488,11 @@ public class SocialFragment extends Fragment {
                 toast("Nama 2-20 karakter");
                 return;
             }
+            name.setText("");
             mClient.put("voice/" + n + "/c", mClient.getUser(), (j, e) -> {
                 if (e != null) toast(e);
                 else loadVoice(list);
             });
-            name.setText("");
         });
         LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(-2, dp(44));
         bp.setMarginStart(dp(8));
@@ -499,29 +517,27 @@ public class SocialFragment extends Fragment {
                 return;
             }
             JSONObject all = (JSONObject) json;
-            long now = System.currentTimeMillis();
             Iterator<String> it = all.keys();
             while (it.hasNext()) {
                 String id = it.next();
                 JSONObject room = all.optJSONObject(id);
-                List<String> members = new ArrayList<>();
-                JSONObject mem = room == null ? null : room.optJSONObject("m");
-                if (mem != null) {
-                    Iterator<String> mi = mem.keys();
-                    while (mi.hasNext()) {
-                        String u = mi.next();
-                        if (now - mem.optLong(u) < VOICE_STALE_MS) members.add(u);
-                    }
-                }
+                List<String> members = new ArrayList<>(membersOf(room).keySet());
                 LinearLayout card = row();
                 card.setBackgroundResource(R.drawable.m3_card);
-                card.setPadding(dp(16), dp(12), dp(12), dp(12));
+                card.setPadding(dp(16), dp(10), dp(12), dp(10));
                 LinearLayout info = column();
                 info.addView(text(id, 16, R.color.m3_text));
                 info.addView(text(members.isEmpty() ? "Kosong" : android.text.TextUtils.join(", ", members), 12, R.color.m3_text_dim));
                 card.addView(info, new LinearLayout.LayoutParams(0, -2, 1f));
                 boolean here = id.equals(mVoiceRoom);
-                card.addView(button(here ? "Keluar" : "Gabung", !here, v -> toggleVoice(id, list)));
+                card.addView(button(here ? "Buka" : "Gabung", true, v -> {
+                    if (here) {
+                        mShowList = false;
+                        select(TAB_VOICE);
+                    } else {
+                        joinVoice(id);
+                    }
+                }));
                 LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
                 lp.bottomMargin = dp(6);
                 list.addView(card, lp);
@@ -529,25 +545,213 @@ public class SocialFragment extends Fragment {
         });
     }
 
-    private void toggleVoice(String id, LinearLayout list) {
-        String me = SocialClient.key(mClient.getUser());
-        if (id.equals(mVoiceRoom)) {
-            mVoiceRoom = null;
-            mClient.delete("voice/" + id + "/m/" + me, (j, e) -> loadVoice(list));
-            return;
+    /** Active members of a room as name to muted flag, dropping stale presence */
+    private java.util.Map<String, Boolean> membersOf(JSONObject room) {
+        java.util.Map<String, Boolean> out = new java.util.LinkedHashMap<>();
+        JSONObject mem = room == null ? null : room.optJSONObject("m");
+        if (mem == null) return out;
+        long now = System.currentTimeMillis();
+        Iterator<String> mi = mem.keys();
+        while (mi.hasNext()) {
+            String u = mi.next();
+            Object v = mem.opt(u);
+            long ts;
+            boolean muted = false;
+            if (v instanceof JSONObject) {
+                ts = ((JSONObject) v).optLong("t");
+                muted = ((JSONObject) v).optBoolean("x");
+            } else {
+                ts = mem.optLong(u);
+            }
+            if (now - ts < VOICE_STALE_MS) out.put(u, muted);
         }
-        final String previous = mVoiceRoom;
-        if (previous != null) mClient.delete("voice/" + previous + "/m/" + me, (j, e) -> { });
+        return out;
+    }
+
+    private void putPresence(SocialClient.Callback cb) {
         try {
-            JSONObject stamp = new JSONObject().put(".sv", "timestamp");
-            mClient.put("voice/" + id + "/m/" + me, stamp, (j, e) -> {
-                if (e != null) toast(e);
-                else mVoiceRoom = id;
-                loadVoice(list);
-            });
+            JSONObject o = new JSONObject();
+            o.put("t", new JSONObject().put(".sv", "timestamp"));
+            o.put("x", mMuted);
+            mClient.put("voice/" + mVoiceRoom + "/m/" + SocialClient.key(mClient.getUser()), o, cb);
         } catch (Exception e) {
             toast(String.valueOf(e));
         }
+    }
+
+    private void joinVoice(String id) {
+        if (mVoiceRoom != null && !mVoiceRoom.equals(id)) leaveVoice(false);
+        mVoiceRoom = id;
+        mMuted = false;
+        mShowList = false;
+        putPresence((j, e) -> {
+            if (e != null) {
+                toast(e);
+                mVoiceRoom = null;
+                return;
+            }
+            startBeat();
+            if (isAdded() && mTab == TAB_VOICE) select(TAB_VOICE);
+        });
+    }
+
+    private void leaveVoice(boolean refresh) {
+        String room = mVoiceRoom;
+        mVoiceRoom = null;
+        if (mBeat != null) mHandler.removeCallbacks(mBeat);
+        mBeat = null;
+        if (room == null) return;
+        mClient.delete("voice/" + room + "/m/" + SocialClient.key(mClient.getUser()), (j, e) -> { });
+        if (refresh && isAdded()) select(TAB_VOICE);
+    }
+
+    /** Refreshes presence so the member does not look stale to others */
+    private void startBeat() {
+        if (mBeat != null) mHandler.removeCallbacks(mBeat);
+        mBeat = new Runnable() {
+            @Override
+            public void run() {
+                if (mVoiceRoom == null) return;
+                putPresence((j, e) -> { });
+                mHandler.postDelayed(this, 30000);
+            }
+        };
+        mHandler.postDelayed(mBeat, 30000);
+    }
+
+    private static final int[] AVATAR_COLORS = {0xFFB9A7C9, 0xFFA7C4C9, 0xFFC9BBA7, 0xFFA7C9AE, 0xFFC9A7B3, 0xFFA7B1C9};
+
+    private View buildCall() {
+        LinearLayout card = column();
+        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+        bg.setColor(0xFF121316);
+        bg.setCornerRadius(dp(22));
+        card.setBackground(bg);
+        card.setPadding(dp(10), dp(8), dp(10), dp(8));
+
+        LinearLayout top = row();
+        ImageView collapse = roundIcon(R.drawable.ic_m3_down_small, 0xFF1E1F23, v -> {
+            mShowList = true;
+            select(TAB_VOICE);
+        });
+        top.addView(collapse, new LinearLayout.LayoutParams(dp(36), dp(36)));
+        LinearLayout titleBox = column();
+        titleBox.setPadding(dp(12), dp(4), dp(12), dp(4));
+        rounded(titleBox, 0xFF1E1F23, 14);
+        TextView title = text(mVoiceRoom, 15, R.color.m3_text);
+        title.setSingleLine(true);
+        TextView count = text("", 11, R.color.m3_text_dim);
+        titleBox.addView(title);
+        titleBox.addView(count);
+        LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(-2, -2);
+        tp.setMarginStart(dp(8));
+        top.addView(titleBox, tp);
+        View spacer = new View(requireContext());
+        top.addView(spacer, new LinearLayout.LayoutParams(0, 1, 1f));
+        ImageView invite = roundIcon(R.drawable.ic_m3_link, 0xFF1E1F23, v -> {
+            android.content.ClipboardManager cm = (android.content.ClipboardManager)
+                    requireContext().getSystemService(android.content.Context.CLIPBOARD_SERVICE);
+            cm.setPrimaryClip(android.content.ClipData.newPlainText("room", mVoiceRoom));
+            toast("Nama room disalin, kirim ke temanmu");
+        });
+        top.addView(invite, new LinearLayout.LayoutParams(dp(36), dp(36)));
+        TextView chat = text("Chat", 13, R.color.m3_text);
+        chat.setGravity(Gravity.CENTER);
+        rounded(chat, 0xFF1E1F23, 14);
+        chat.setClickable(true);
+        chat.setOnClickListener(v -> {
+            mRoom = mVoiceRoom;
+            select(TAB_CHAT);
+        });
+        LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(dp(56), dp(36));
+        cp.setMarginStart(dp(8));
+        top.addView(chat, cp);
+        card.addView(top, new LinearLayout.LayoutParams(-1, -2));
+
+        android.widget.HorizontalScrollView hs = new android.widget.HorizontalScrollView(requireContext());
+        hs.setHorizontalScrollBarEnabled(false);
+        LinearLayout tiles = row();
+        tiles.setGravity(Gravity.CENTER);
+        hs.setFillViewport(true);
+        hs.addView(tiles, new ViewGroup.LayoutParams(-1, -1));
+        card.addView(hs, new LinearLayout.LayoutParams(-1, 0, 1f));
+
+        LinearLayout bar = row();
+        rounded(bar, 0xFF1E1F23, 26);
+        bar.setPadding(dp(6), dp(6), dp(6), dp(6));
+        ImageView mic = roundIcon(R.drawable.ic_microphone, 0xFF121316, null);
+        ImageView hang = roundIcon(R.drawable.ic_m3_close, 0xFFD93A3F, v -> leaveVoice(true));
+        bar.addView(mic, new LinearLayout.LayoutParams(dp(60), dp(42)));
+        LinearLayout.LayoutParams hp = new LinearLayout.LayoutParams(dp(72), dp(42));
+        hp.setMarginStart(dp(8));
+        bar.addView(hang, hp);
+        LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(-2, -2);
+        bp.gravity = Gravity.CENTER_HORIZONTAL;
+        card.addView(bar, bp);
+        mic.setOnClickListener(v -> {
+            mMuted = !mMuted;
+            mic.setAlpha(mMuted ? 0.4f : 1f);
+            putPresence((j, e) -> refreshCall(tiles, count));
+        });
+        mic.setAlpha(mMuted ? 0.4f : 1f);
+        Fluid.pressAll(card);
+
+        mVoiceView = new Runnable() {
+            @Override
+            public void run() {
+                if (!isAdded() || mVoiceRoom == null) return;
+                refreshCall(tiles, count);
+                mHandler.postDelayed(this, POLL_MS);
+            }
+        };
+        mHandler.post(mVoiceView);
+        return card;
+    }
+
+    private void refreshCall(LinearLayout tiles, TextView count) {
+        if (mVoiceRoom == null) return;
+        mClient.get("voice/" + mVoiceRoom, (json, err) -> {
+            if (!isAdded() || mVoiceRoom == null || err != null) return;
+            java.util.Map<String, Boolean> members = membersOf(json instanceof JSONObject ? (JSONObject) json : null);
+            count.setText(members.size() + " di room");
+            tiles.removeAllViews();
+            for (java.util.Map.Entry<String, Boolean> m : members.entrySet()) {
+                LinearLayout t = column();
+                t.setGravity(Gravity.CENTER_HORIZONTAL);
+                TextView av = text(m.getKey().substring(0, 1).toUpperCase(Locale.ROOT), 22, R.color.m3_bg);
+                av.setGravity(Gravity.CENTER);
+                rounded(av, AVATAR_COLORS[Math.abs(m.getKey().toLowerCase(Locale.ROOT).hashCode()) % AVATAR_COLORS.length], 28);
+                t.addView(av, new LinearLayout.LayoutParams(dp(56), dp(56)));
+                TextView n = text(m.getKey(), 12, R.color.m3_text);
+                n.setSingleLine(true);
+                n.setMaxWidth(dp(80));
+                n.setPadding(0, dp(4), 0, 0);
+                t.addView(n);
+                if (m.getValue()) t.addView(text("mic mati", 10, R.color.m3_badge));
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(84), -2);
+                tiles.addView(t, lp);
+            }
+        });
+    }
+
+    private ImageView roundIcon(int iconRes, int bgColor, View.OnClickListener l) {
+        ImageView v = new ImageView(requireContext());
+        rounded(v, bgColor, 14);
+        v.setImageResource(iconRes);
+        v.setColorFilter(0xFFFFFFFF);
+        v.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        v.setPadding(dp(9), dp(9), dp(9), dp(9));
+        v.setClickable(true);
+        v.setFocusable(true);
+        if (l != null) v.setOnClickListener(l);
+        return v;
+    }
+
+    private void rounded(View v, int color, float radiusDp) {
+        android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable();
+        g.setColor(color);
+        g.setCornerRadius(dp(radiusDp));
+        v.setBackground(g);
     }
 
     // ---- friends ----

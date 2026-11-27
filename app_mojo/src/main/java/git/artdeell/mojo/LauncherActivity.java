@@ -75,7 +75,8 @@ public class LauncherActivity extends BaseActivity {
             if(f instanceof DialogFragment || f.getParentFragment() != null) return;
             boolean ownHeader = f instanceof MainMenuFragment || f instanceof VersionListFragment
                     || f instanceof DownloadFragment || f instanceof FileManagerFragment || f instanceof GameInstallFragment || f instanceof AccountListFragment
-                    || f instanceof InstanceEditorFragment || f instanceof FileSelectorFragment;
+                    || f instanceof InstanceEditorFragment || f instanceof FileSelectorFragment
+                    || f instanceof git.artdeell.mojo.social.SocialFragment;
             Fluid.fade(mHeaderBar, !ownHeader);
         }
     };

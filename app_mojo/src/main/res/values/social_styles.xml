@@ -2,7 +2,7 @@
 <resources>
     <style name="SocialTab">
         <item name="android:layout_width">wrap_content</item>
-        <item name="android:layout_height">40dp</item>
+        <item name="android:layout_height">36dp</item>
         <item name="android:layout_marginStart">6dp</item>
         <item name="android:layout_marginEnd">6dp</item>
         <item name="android:background">@drawable/m3_chip_off</item>
