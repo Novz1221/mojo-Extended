@@ -15,7 +15,7 @@
 
 You can get MojoExtended via:
 
- You can get the prebuilt app from the [releases section](http://github.com/mojo-extended/mojo-extended/releases).
+ You can get the prebuilt app from the [releases section](https://github.com/Novz1221/mojo-Extended/releases).
 
 
 ## Current roadmap
