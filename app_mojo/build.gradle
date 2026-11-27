@@ -339,6 +339,9 @@ dependencies {
 
     implementation 'com.github.MojoLauncher:alsoft-android-aar:f369161d5f'
 
+    // Voice chat di fitur Sosial
+    implementation 'io.agora.rtc:voice-sdk:4.6.3'
+
     implementation project(":glfw:jni_bindings")
     implementation project(":sdl:jni_bindings")
     // implementation 'net.sourceforge.streamsupport:streamsupport-cfuture:1.7.0'

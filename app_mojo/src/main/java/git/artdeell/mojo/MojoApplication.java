@@ -63,8 +63,22 @@ public class MojoApplication extends Application {
 		});
 	}
 
+	/** Proses ":voice" hanya menjalankan VoiceService, jadi tidak perlu inisialisasi launcher */
+	private static boolean isVoiceProcess() {
+		try (java.io.BufferedReader r = new java.io.BufferedReader(new java.io.FileReader("/proc/self/cmdline"))) {
+			String name = r.readLine();
+			return name != null && name.trim().endsWith(":voice");
+		} catch (Throwable t) {
+			return false;
+		}
+	}
+
 	@Override
 	public void onCreate() {
+		if(isVoiceProcess()) {
+			super.onCreate();
+			return;
+		}
 		ContextExecutor.setApplication(this);
 		// Disable fatal errors on gplay. This is necessary so that google can collect crash report data and send it to me
 		// (where i can find the cause and fix it)

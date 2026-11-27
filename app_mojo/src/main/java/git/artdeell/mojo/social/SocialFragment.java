@@ -1,5 +1,12 @@
 package git.artdeell.mojo.social;
 
+import android.Manifest;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -15,6 +22,8 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
@@ -42,6 +51,8 @@ public class SocialFragment extends Fragment {
     public static final String TAG = "SocialFragment";
     private static final int TAB_CHAT = 0, TAB_VOICE = 1, TAB_FRIENDS = 2, TAB_ACCOUNT = 3;
     private static final long POLL_MS = 3000, COOLDOWN_MS = 3000, VOICE_STALE_MS = 90000;
+    /** Pengaman kuota Agora: batas peserta per room. Keluar otomatis diatur di VoiceService. */
+    private static final int MAX_VOICE_MEMBERS = 6;
 
     private SocialClient mClient;
     private FrameLayoutHolder mBody;
@@ -59,7 +70,11 @@ public class SocialFragment extends Fragment {
     private boolean mMuted;
     private boolean mShowList;
     private Runnable mVoiceView;
-    private Runnable mBeat;
+    private ImageView mMicView;
+    private ActivityResultLauncher<String> mMicLauncher;
+    private String mPendingJoin;
+    private java.util.Set<Integer> mSpeaking = new java.util.HashSet<>();
+    private final java.util.Map<String, TextView> mAvatars = new java.util.LinkedHashMap<>();
 
     /** Tiny wrapper so the body container can be swapped */
     private static class FrameLayoutHolder {
@@ -73,6 +88,58 @@ public class SocialFragment extends Fragment {
 
     public SocialFragment() {
         super(R.layout.fragment_social);
+    }
+
+    /** Status dari VoiceService (proses :voice): aktif atau tidak, room, mute, siapa yang bicara */
+    private final BroadcastReceiver mVoiceReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent i) {
+            if (!isAdded()) return;
+            boolean active = i.getBooleanExtra("active", false);
+            String room = i.getStringExtra("room");
+            String error = i.getStringExtra("error");
+            if (error != null) toast(error);
+            boolean changed = active != (mVoiceRoom != null)
+                    || (active && room != null && !room.equals(mVoiceRoom));
+            mVoiceRoom = active ? room : null;
+            mMuted = i.getBooleanExtra("muted", false);
+            mClient.setVoiceHint(active);
+            java.util.Set<Integer> sp = new java.util.HashSet<>();
+            int[] arr = i.getIntArrayExtra("speaking");
+            if (arr != null) for (int u : arr) sp.add(u);
+            mSpeaking = sp;
+            if (changed) {
+                if (mTab == TAB_VOICE) select(TAB_VOICE);
+            } else {
+                applySpeaking();
+                if (mMicView != null) mMicView.setAlpha(mMuted ? 0.4f : 1f);
+            }
+        }
+    };
+
+    private void registerVoiceReceiver() {
+        IntentFilter f = new IntentFilter(VoiceService.ACTION_STATE);
+        Context c = requireContext().getApplicationContext();
+        if (Build.VERSION.SDK_INT >= 33) c.registerReceiver(mVoiceReceiver, f, Context.RECEIVER_NOT_EXPORTED);
+        else c.registerReceiver(mVoiceReceiver, f);
+    }
+
+    private void unregisterVoiceReceiver() {
+        try {
+            requireContext().getApplicationContext().unregisterReceiver(mVoiceReceiver);
+        } catch (IllegalArgumentException ignored) { }
+    }
+
+    @Override
+    public void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        mMicLauncher = registerForActivityResult(new ActivityResultContracts.RequestPermission(), granted -> {
+            String id = mPendingJoin;
+            mPendingJoin = null;
+            if (id == null || !isAdded()) return;
+            if (granted) joinVoice(id);
+            else toast("Izin mikrofon ditolak, voice chat butuh mikrofon");
+        });
     }
 
     @Override
@@ -91,6 +158,8 @@ public class SocialFragment extends Fragment {
             mTabs[i].setOnClickListener(v -> select(t));
         }
         Fluid.pressAll(view);
+        registerVoiceReceiver();
+        if (mClient.isVoiceHint()) VoiceService.query(requireContext());
         select(mClient.isConfigured() && mClient.isLoggedIn() ? TAB_CHAT : TAB_ACCOUNT);
     }
 
@@ -212,7 +281,8 @@ public class SocialFragment extends Fragment {
     @Override
     public void onDestroyView() {
         stopPolling();
-        if (mVoiceRoom != null) leaveVoice(false);
+        unregisterVoiceReceiver();
+        mMicView = null;
         super.onDestroyView();
     }
 
@@ -274,6 +344,14 @@ public class SocialFragment extends Fragment {
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(48));
             lp.topMargin = dp(10);
             c.addView(db, lp);
+            TextView ag = button("Agora App ID (voice chat)", false, v ->
+                    M3Dialog.input(requireContext(), "Agora App ID", "App ID dari console.agora.io", null, "Simpan", id -> {
+                        mClient.setAgoraAppId(id);
+                        toast(mClient.getAgoraAppId().isEmpty() ? "App ID dikosongkan" : "App ID disimpan");
+                    }));
+            LinearLayout.LayoutParams ap = new LinearLayout.LayoutParams(-1, dp(48));
+            ap.topMargin = dp(10);
+            c.addView(ag, ap);
             return c;
         }
         TextView hint = text("Pilih username untuk chat, teman, dan voice room.", 13, R.color.m3_text_dim);
@@ -462,7 +540,7 @@ public class SocialFragment extends Fragment {
         }
     }
 
-    // ---- voice rooms (presence only, no audio) ----
+    // ---- voice rooms: presence lewat Firebase, audio lewat VoiceEngine (Agora) ----
 
     private View buildVoice() {
         return mVoiceRoom != null && !mShowList ? buildCall() : buildVoiceList();
@@ -472,7 +550,7 @@ public class SocialFragment extends Fragment {
         LinearLayout c = column();
         c.setPadding(dp(8), dp(4), dp(8), 0);
         c.addView(text("Voice Room", 20, R.color.m3_text));
-        TextView hint = text("Daftar room dan siapa yang bergabung. Audio langsung belum tersedia.", 13, R.color.m3_text_dim);
+        TextView hint = text("Gabung room untuk bicara langsung lewat mikrofon. Maksimal " + MAX_VOICE_MEMBERS + " orang per room.", 13, R.color.m3_text_dim);
         hint.setPadding(0, dp(2), 0, dp(6));
         c.addView(hint);
         LinearLayout list = column();
@@ -535,7 +613,7 @@ public class SocialFragment extends Fragment {
                         mShowList = false;
                         select(TAB_VOICE);
                     } else {
-                        joinVoice(id);
+                        tryJoinVoice(id);
                     }
                 }));
                 LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
@@ -568,55 +646,65 @@ public class SocialFragment extends Fragment {
         return out;
     }
 
-    private void putPresence(SocialClient.Callback cb) {
-        try {
-            JSONObject o = new JSONObject();
-            o.put("t", new JSONObject().put(".sv", "timestamp"));
-            o.put("x", mMuted);
-            mClient.put("voice/" + mVoiceRoom + "/m/" + SocialClient.key(mClient.getUser()), o, cb);
-        } catch (Exception e) {
-            toast(String.valueOf(e));
+    /** Cek App ID, kapasitas room, dan izin mikrofon sebelum benar-benar masuk */
+    private void tryJoinVoice(String id) {
+        if (mClient.getAgoraAppId().isEmpty()) {
+            toast("Isi Agora App ID dulu di tab Akun");
+            return;
         }
-    }
-
-    private void joinVoice(String id) {
-        if (mVoiceRoom != null && !mVoiceRoom.equals(id)) leaveVoice(false);
-        mVoiceRoom = id;
-        mMuted = false;
-        mShowList = false;
-        putPresence((j, e) -> {
-            if (e != null) {
-                toast(e);
-                mVoiceRoom = null;
+        mClient.get("voice/" + id, (json, err) -> {
+            if (!isAdded()) return;
+            if (err != null) {
+                toast(err);
                 return;
             }
-            startBeat();
-            if (isAdded() && mTab == TAB_VOICE) select(TAB_VOICE);
+            java.util.Map<String, Boolean> now = membersOf(json instanceof JSONObject ? (JSONObject) json : null);
+            boolean already = now.containsKey(SocialClient.key(mClient.getUser()));
+            if (!already && now.size() >= MAX_VOICE_MEMBERS) {
+                toast("Room penuh (maksimal " + MAX_VOICE_MEMBERS + " orang)");
+                return;
+            }
+            if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.RECORD_AUDIO)
+                    == PackageManager.PERMISSION_GRANTED) {
+                joinVoice(id);
+            } else {
+                mPendingJoin = id;
+                mMicLauncher.launch(Manifest.permission.RECORD_AUDIO);
+            }
         });
     }
 
-    private void leaveVoice(boolean refresh) {
-        String room = mVoiceRoom;
-        mVoiceRoom = null;
-        if (mBeat != null) mHandler.removeCallbacks(mBeat);
-        mBeat = null;
-        if (room == null) return;
-        mClient.delete("voice/" + room + "/m/" + SocialClient.key(mClient.getUser()), (j, e) -> { });
-        if (refresh && isAdded()) select(TAB_VOICE);
+    /** uid Agora stabil dari nama (sama di semua HP), tidak pernah 0 */
+    private static int uidFor(String name) {
+        int u = SocialClient.key(name).hashCode() & 0x7fffffff;
+        return u == 0 ? 1 : u;
     }
 
-    /** Refreshes presence so the member does not look stale to others */
-    private void startBeat() {
-        if (mBeat != null) mHandler.removeCallbacks(mBeat);
-        mBeat = new Runnable() {
-            @Override
-            public void run() {
-                if (mVoiceRoom == null) return;
-                putPresence((j, e) -> { });
-                mHandler.postDelayed(this, 30000);
-            }
-        };
-        mHandler.postDelayed(mBeat, 30000);
+    /** Voice berjalan di VoiceService, jadi tetap hidup saat layar ini ditutup atau game dimulai */
+    private void joinVoice(String id) {
+        String user = mClient.getUser();
+        boolean ok = VoiceService.join(requireContext(), id, SocialClient.key(user), uidFor(user),
+                mClient.getAgoraAppId(), mClient.getUrl());
+        if (!ok) {
+            toast("Tidak bisa memulai layanan suara");
+            return;
+        }
+        mVoiceRoom = id;
+        mMuted = false;
+        mShowList = false;
+        mSpeaking = new java.util.HashSet<>();
+        mClient.setVoiceHint(true);
+        if (mTab == TAB_VOICE) select(TAB_VOICE);
+    }
+
+    private void leaveVoice(boolean refresh) {
+        if (mVoiceRoom == null) return;
+        mVoiceRoom = null;
+        mSpeaking = new java.util.HashSet<>();
+        mAvatars.clear();
+        mClient.setVoiceHint(false);
+        VoiceService.leave(requireContext());
+        if (refresh && isAdded()) select(TAB_VOICE);
     }
 
     private static final int[] AVATAR_COLORS = {0xFFB9A7C9, 0xFFA7C4C9, 0xFFC9BBA7, 0xFFA7C9AE, 0xFFC9A7B3, 0xFFA7B1C9};
@@ -691,9 +779,10 @@ public class SocialFragment extends Fragment {
         mic.setOnClickListener(v -> {
             mMuted = !mMuted;
             mic.setAlpha(mMuted ? 0.4f : 1f);
-            putPresence((j, e) -> refreshCall(tiles, count));
+            VoiceService.setMuted(requireContext(), mMuted);
         });
         mic.setAlpha(mMuted ? 0.4f : 1f);
+        mMicView = mic;
         Fluid.pressAll(card);
 
         mVoiceView = new Runnable() {
@@ -715,12 +804,14 @@ public class SocialFragment extends Fragment {
             java.util.Map<String, Boolean> members = membersOf(json instanceof JSONObject ? (JSONObject) json : null);
             count.setText(members.size() + " di room");
             tiles.removeAllViews();
+            mAvatars.clear();
             for (java.util.Map.Entry<String, Boolean> m : members.entrySet()) {
                 LinearLayout t = column();
                 t.setGravity(Gravity.CENTER_HORIZONTAL);
                 TextView av = text(m.getKey().substring(0, 1).toUpperCase(Locale.ROOT), 22, R.color.m3_bg);
                 av.setGravity(Gravity.CENTER);
-                rounded(av, AVATAR_COLORS[Math.abs(m.getKey().toLowerCase(Locale.ROOT).hashCode()) % AVATAR_COLORS.length], 28);
+                mAvatars.put(m.getKey(), av);
+                styleAvatar(av, m.getKey(), mSpeaking.contains(uidFor(m.getKey())));
                 t.addView(av, new LinearLayout.LayoutParams(dp(56), dp(56)));
                 TextView n = text(m.getKey(), 12, R.color.m3_text);
                 n.setSingleLine(true);
@@ -732,6 +823,22 @@ public class SocialFragment extends Fragment {
                 tiles.addView(t, lp);
             }
         });
+    }
+
+    /** Avatar dengan cincin hijau kalau orangnya sedang bicara */
+    private void styleAvatar(TextView av, String key, boolean speaking) {
+        android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable();
+        g.setColor(AVATAR_COLORS[Math.abs(key.toLowerCase(Locale.ROOT).hashCode()) % AVATAR_COLORS.length]);
+        g.setCornerRadius(dp(28));
+        if (speaking) g.setStroke(dp(3), 0xFF4CD964);
+        av.setBackground(g);
+    }
+
+    private void applySpeaking() {
+        if (!isAdded()) return;
+        for (java.util.Map.Entry<String, TextView> e : mAvatars.entrySet()) {
+            styleAvatar(e.getValue(), e.getKey(), mSpeaking.contains(uidFor(e.getKey())));
+        }
     }
 
     private ImageView roundIcon(int iconRes, int bgColor, View.OnClickListener l) {
