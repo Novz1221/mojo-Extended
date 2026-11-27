@@ -6,15 +6,6 @@
 
 * It can run almost every version of Minecraft, allowing you to use .jar only installers to install modloaders such as [Forge](https://files.minecraftforge.net/) and [Fabric](http://fabricmc.net/) and mods like [OptiFine](https://optifine.net).
 
-## Navigation
-- [Introduction](#introduction)
-- [Getting MojoExtended](#getting-mojoExtended)
-- [Building](#building) 
-- [Current roadmap](#current-roadmap) 
-- [License](#license) 
-- [Contributing](#contributing) 
-- [Credits & Third party components and their licenses](#credits--third-party-components-and-their-licenses-if-available)
-
 ## Introduction 
 * MojoExtended is a Minecraft: Java Edition launcher for Android based on [PojavLauncher](https://github.com/PojavLauncherTeam/PojavLauncher)
 * This launcher can launch almost all available Minecraft versions ranging from rd-132211 to 26.x snapshots (including Combat Test versions). 
@@ -24,7 +15,7 @@
 
 You can get MojoExtended via:
 
- You can get the prebuilt app from the [releases section](http://github.com/mojolauncher/mojolauncher/releases).
+ You can get the prebuilt app from the [releases section](http://github.com/mojo-extended/mojo-extended/releases).
 
 
 ## Current roadmap
@@ -49,7 +40,7 @@ You can get MojoExtended via:
 - Probably more, that's why we have a bug tracker ;) 
 
 ## License
-- MojoLauncher is licensed under [GNU LGPLv3](https://github.com/MojoLauncher/MojoLauncher/blob/v3_openjdk/LICENSE).
+- MojoExtended is licensed under [GNU LGPLv3](https://github.com/MojoLauncher/MojoLauncher/blob/v3_openjdk/LICENSE).
 
 ## Contributing
 Contributions are welcome! We appreciate any type of contribution, not only code. For example, you can help the wiki shape up. You can help the [translation](https://mojolauncher.ru/translate/translator.html) too!
@@ -73,3 +64,6 @@ Any code change to this repository should be submitted as a pull request. The de
 - [alsoft](https://github.com/kcat/openal-soft/) (Audio output library): [GNU Library General Public License](https://github.com/kcat/openal-soft/blob/master/COPYING) and [Modified PFFFT](https://github.com/kcat/openal-soft/blob/master/LICENSE-pffft).
 - [oboe](https://github.com/google/oboe): [Apache License 2.0](https://github.com/google/oboe/blob/main/LICENSE).
 - Thanks to [Mineskin](https://mineskin.eu/) for providing Minecraft avatars.
+
+## Notes
+This Fork From Mojo Launcher
