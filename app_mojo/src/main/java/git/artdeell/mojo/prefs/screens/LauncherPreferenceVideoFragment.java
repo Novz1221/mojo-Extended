@@ -67,6 +67,7 @@ public class LauncherPreferenceVideoFragment extends LauncherPreferenceFragment 
 
         requirePreference("alternate_surface", SwitchPreferenceCompat.class).setChecked(LauncherPreferences.PREF_USE_ALTERNATE_SURFACE);
         requirePreference("force_vsync", SwitchPreferenceCompat.class).setChecked(LauncherPreferences.PREF_FORCE_VSYNC);
+        requirePreference("show_fps", SwitchPreferenceCompat.class).setChecked(LauncherPreferences.PREF_SHOW_FPS);
 
         // Show ANGLE switch only if AnglePlugin is available
         if(hasAngle == null) {

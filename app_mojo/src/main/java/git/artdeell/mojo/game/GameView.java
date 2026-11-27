@@ -49,7 +49,7 @@ public class GameView extends FrameLayout implements PlatformGrabListener, Surfa
     /* Sensitivity, adjusted according to screen size */
     private final double mSensitivityFactor = (1.4 * (1080f/ Tools.getDisplayMetrics((Activity) getContext()).heightPixels));
 
-    private final SurfaceProvider mSurfaceProvider = LauncherPreferences.PREF_USE_ALTERNATE_SURFACE ? new SurfaceViewSurfaceProvider() : new TextureViewSurfaceProvider();
+    private final SurfaceProvider mSurfaceProvider = (LauncherPreferences.PREF_USE_ALTERNATE_SURFACE && !LauncherPreferences.PREF_SHOW_FPS) ? new SurfaceViewSurfaceProvider() : new TextureViewSurfaceProvider();
     private boolean mRefreshOnly = true;
     /* Surface ready listener, used by the activity to launch minecraft */
     SurfaceReadyListener mSurfaceReadyListener = null;
@@ -101,6 +101,7 @@ public class GameView extends FrameLayout implements PlatformGrabListener, Surfa
         mRefreshOnly = isAlreadyRunning;
         mSurface = mSurfaceProvider.create(getContext(), this);
         this.addView(mSurface);
+        if(LauncherPreferences.PREF_SHOW_FPS) this.addView(new FpsView(getContext()));
         this.mCursorView.bringToFront();
         this.requestFocus();
     }
