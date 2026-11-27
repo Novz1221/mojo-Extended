@@ -268,6 +268,7 @@ public class GameActivity extends BaseActivity implements ControlButtonMenuListe
                      case GameMenuAdapter.POS_AUDIO: mRecorder.cycleAudio(); return;
                      case GameMenuAdapter.POS_RES: mRecorder.cycleResolution(); return;
                      case GameMenuAdapter.POS_FPS: mRecorder.cycleFps(); return;
+                     case GameMenuAdapter.POS_SHOW_FPS: toggleShowFps(); return;
                 }
                 drawerLayout.closeDrawers();
             };
@@ -293,6 +294,15 @@ public class GameActivity extends BaseActivity implements ControlButtonMenuListe
         } catch (Throwable e) {
             Tools.showError(this, e, true);
         }
+    }
+
+    private void toggleShowFps() {
+        boolean on = !LauncherPreferences.PREF_SHOW_FPS;
+        LauncherPreferences.PREF_SHOW_FPS = on;
+        LauncherPreferences.DEFAULT_PREF.edit().putBoolean("show_fps", on).apply();
+        if(launcherGLView.canShowFps()) launcherGLView.setFpsVisible(on);
+        else if(on) Toast.makeText(this, R.string.fps_restart_needed, Toast.LENGTH_LONG).show();
+        gameActionArrayAdapter.notifyDataSetChanged();
     }
 
     private void loadControls() {

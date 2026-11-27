@@ -51,6 +51,7 @@ public class GameView extends FrameLayout implements PlatformGrabListener, Surfa
 
     private final SurfaceProvider mSurfaceProvider = (LauncherPreferences.PREF_USE_ALTERNATE_SURFACE && !LauncherPreferences.PREF_SHOW_FPS) ? new SurfaceViewSurfaceProvider() : new TextureViewSurfaceProvider();
     private boolean mRefreshOnly = true;
+    private FpsView mFpsView;
     /* Surface ready listener, used by the activity to launch minecraft */
     SurfaceReadyListener mSurfaceReadyListener = null;
     final Object mSurfaceReadyListenerLock = new Object();
@@ -101,9 +102,27 @@ public class GameView extends FrameLayout implements PlatformGrabListener, Surfa
         mRefreshOnly = isAlreadyRunning;
         mSurface = mSurfaceProvider.create(getContext(), this);
         this.addView(mSurface);
-        if(LauncherPreferences.PREF_SHOW_FPS) this.addView(new FpsView(getContext()));
+        if(LauncherPreferences.PREF_SHOW_FPS) setFpsVisible(true);
         this.mCursorView.bringToFront();
         this.requestFocus();
+    }
+
+    /** True when the active surface can report frames (TextureView only) */
+    public boolean canShowFps() {
+        return mSurfaceProvider instanceof TextureViewSurfaceProvider;
+    }
+
+    /** Shows or hides the FPS overlay. Does nothing on SurfaceView, which has no frame callback. */
+    public void setFpsVisible(boolean visible) {
+        if(!canShowFps()) return;
+        if(visible && mFpsView == null) {
+            mFpsView = new FpsView(getContext());
+            addView(mFpsView);
+            mCursorView.bringToFront();
+        } else if(!visible && mFpsView != null) {
+            removeView(mFpsView);
+            mFpsView = null;
+        }
     }
 
     /**
