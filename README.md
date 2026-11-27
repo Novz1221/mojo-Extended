@@ -16,7 +16,7 @@
 - [Credits & Third party components and their licenses](#credits--third-party-components-and-their-licenses-if-available)
 
 ## Introduction 
-* MojoLauncher is a Minecraft: Java Edition launcher for Android based on [PojavLauncher](https://github.com/PojavLauncherTeam/PojavLauncher)
+* MojoExtended is a Minecraft: Java Edition launcher for Android based on [PojavLauncher](https://github.com/PojavLauncherTeam/PojavLauncher)
 * This launcher can launch almost all available Minecraft versions ranging from rd-132211 to 26.x snapshots (including Combat Test versions). 
 * Modding via Forge and Fabric are also supported. 
 
@@ -36,7 +36,7 @@ You can get MojoExtended via:
 - [x] Modify ui like looks modern ui
 - [ ] LTW: resolve issues with Create
 - [ ] LTW: switch to a color-renderable format for framebuffers
-- [ ] Modpack/mod management tool
+- [x] Modpack/mod management tool
 - [ ] MMC-compatible instance import
 - [ ] Vintage Story support
 - [ ] Implement common native library standard
