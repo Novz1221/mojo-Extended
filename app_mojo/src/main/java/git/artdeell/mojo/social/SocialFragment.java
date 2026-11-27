@@ -348,6 +348,7 @@ public class SocialFragment extends Fragment {
                     M3Dialog.input(requireContext(), "Agora App ID", "App ID dari console.agora.io", null, "Simpan", id -> {
                         mClient.setAgoraAppId(id);
                         toast(mClient.getAgoraAppId().isEmpty() ? "App ID dikosongkan" : "App ID disimpan");
+                        return true;
                     }));
             LinearLayout.LayoutParams ap = new LinearLayout.LayoutParams(-1, dp(48));
             ap.topMargin = dp(10);
