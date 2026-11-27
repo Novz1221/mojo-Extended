@@ -49,7 +49,7 @@ public class GameView extends FrameLayout implements PlatformGrabListener, Surfa
     /* Sensitivity, adjusted according to screen size */
     private final double mSensitivityFactor = (1.4 * (1080f/ Tools.getDisplayMetrics((Activity) getContext()).heightPixels));
 
-    private final SurfaceProvider mSurfaceProvider = (LauncherPreferences.PREF_USE_ALTERNATE_SURFACE && !LauncherPreferences.PREF_SHOW_FPS) ? new SurfaceViewSurfaceProvider() : new TextureViewSurfaceProvider();
+    private SurfaceProvider mSurfaceProvider = (LauncherPreferences.PREF_USE_ALTERNATE_SURFACE && !LauncherPreferences.PREF_SHOW_FPS) ? new SurfaceViewSurfaceProvider() : new TextureViewSurfaceProvider();
     private boolean mRefreshOnly = true;
     private FpsView mFpsView;
     /* Surface ready listener, used by the activity to launch minecraft */
@@ -112,7 +112,22 @@ public class GameView extends FrameLayout implements PlatformGrabListener, Surfa
         return mSurfaceProvider instanceof TextureViewSurfaceProvider;
     }
 
-    /** Shows or hides the FPS overlay. Does nothing on SurfaceView, which has no frame callback. */
+    /**
+     * Swaps a running SurfaceView for a TextureView so frames can be counted.
+     * The game keeps running, it only gets a new surface like after returning to the app.
+     */
+    public void switchToTextureView() {
+        if(canShowFps() || mSurface == null) return;
+        removeView(mSurface);
+        mSurfaceProvider = new TextureViewSurfaceProvider();
+        mRefreshOnly = true;
+        mSurface = mSurfaceProvider.create(getContext(), this);
+        addView(mSurface, 0);
+        mCursorView.bringToFront();
+        post(() -> refreshSize(true));
+    }
+
+    /** Shows or hides the FPS overlay. Needs the TextureView, which reports frames. */
     public void setFpsVisible(boolean visible) {
         if(!canShowFps()) return;
         if(visible && mFpsView == null) {

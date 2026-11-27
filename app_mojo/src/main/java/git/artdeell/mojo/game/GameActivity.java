@@ -300,8 +300,12 @@ public class GameActivity extends BaseActivity implements ControlButtonMenuListe
         boolean on = !LauncherPreferences.PREF_SHOW_FPS;
         LauncherPreferences.PREF_SHOW_FPS = on;
         LauncherPreferences.DEFAULT_PREF.edit().putBoolean("show_fps", on).apply();
-        if(launcherGLView.canShowFps()) launcherGLView.setFpsVisible(on);
-        else if(on) Toast.makeText(this, R.string.fps_restart_needed, Toast.LENGTH_LONG).show();
+        if(on && !launcherGLView.canShowFps()) {
+            // A TextureView over a null window background renders white
+            getWindow().setBackgroundDrawable(new ColorDrawable(Color.BLACK));
+            launcherGLView.switchToTextureView();
+        }
+        launcherGLView.setFpsVisible(on);
         gameActionArrayAdapter.notifyDataSetChanged();
     }
 

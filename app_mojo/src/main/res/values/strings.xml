@@ -774,5 +774,4 @@
         <item quantity="one">%d year ago</item>
         <item quantity="other">%d years ago</item>
     </plurals>
-    <string name="fps_restart_needed">FPS aktif setelah game dijalankan ulang (aktifkan juga di pengaturan: matikan Alternate surface)</string>
 </resources>
