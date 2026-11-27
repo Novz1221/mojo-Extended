@@ -28,7 +28,7 @@ public final class SocialClient {
     /** Default database, so players do not have to paste a URL */
     public static final String DEFAULT_URL = "https://noba-be394-default-rtdb.asia-southeast1.firebasedatabase.app";
     /** Agora App ID bawaan (kosong = pemain/pemilik mengisi di tab Akun) */
-    public static final String DEFAULT_AGORA_APP_ID = "fd9555cddf6246c4926a9980bcd10a79";
+    public static final String DEFAULT_AGORA_APP_ID = "8754e8264345474e96d78be881df9b16";
     private static final String KEY_URL = "db_url";
     private static final String KEY_AGORA = "agora_app_id";
     private static final String KEY_VOICE_HINT = "voice_active";
