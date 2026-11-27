@@ -55,6 +55,7 @@ public class ControlData {
     public boolean isToggle, passThruEnabled;
     public String name;
     public int[] keycodes;      //Should store up to 4 keys
+    public String command;      // Optional chat command typed in with one tap
     public float opacity;       //Alpha value from 0 to 1;
     public int bgColor;
     public int strokeColor;
@@ -152,6 +153,7 @@ public class ControlData {
                 controlData.passThruEnabled,
                 controlData.bitmapTag
         );
+        this.command = controlData.command;
     }
 
     public static ControlData[] getSpecialButtons() {

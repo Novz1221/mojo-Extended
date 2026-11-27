@@ -206,6 +206,12 @@ public class ControlButton extends TextView implements ControlInterface {
     }
 
     public void sendKeyPresses(boolean isDown){
+        String command = mProperties.command;
+        if(command != null && !command.isEmpty()) {
+            setActivated(isDown);
+            if(isDown) git.artdeell.mojo.input.CommandMacro.start(getControlLayoutParent().getGameSurface(), command);
+            return;
+        }
         setActivated(isDown);
         for(int keycode : mProperties.keycodes){
             if(keycode >= KeyEvent.KEYCODE_UNKNOWN){

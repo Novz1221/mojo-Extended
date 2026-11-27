@@ -50,6 +50,7 @@ public abstract class QuickSettingSideDialog extends com.kdt.SideDialogView {
     @Override
     protected void onInflate() {
         bindLayout();
+        git.artdeell.mojo.input.CommandSpeedBinder.bind(mDialogContent);
         Tools.runOnUiThread(() -> {
             this.setupListeners();
             this.updateGyroCompatibility();

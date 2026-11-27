@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
     <!-- App name part -->
-    <string name="app_short_name">MJExtended 2</string>
+    <string name="app_short_name">MJExtended</string>
 
     <!-- Action bar part -->
 
@@ -585,6 +585,9 @@
     <string name="m3_no_versions">No installed versions</string>
     <string name="m3_launch">Launch</string>
     <string name="m3_default_game">Default Game</string>
+    <string name="control_command_title">Command (sekali tekan, diketik di chat)</string>
+    <string name="control_command_hint">contoh: /gamemode creative</string>
+    <string name="control_command_speed">Kecepatan command</string>
     <string name="m3_export_mrpack">Ekspor Ke Mrpack</string>
     <string name="m3_export_mrpack_busy">Mengekspor mrpack…</string>
     <string name="m3_export_mrpack_done">Mrpack berhasil diekspor</string>

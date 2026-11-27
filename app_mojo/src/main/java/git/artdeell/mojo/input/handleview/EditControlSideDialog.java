@@ -62,7 +62,7 @@ public class EditControlSideDialog extends SideDialogView {
             internalChanges = false;
         }
     };
-    private EditText mNameEditText, mWidthEditText, mHeightEditText;
+    private EditText mNameEditText, mWidthEditText, mHeightEditText, mCommandEditText;
     private SwitchCompat mToggleSwitch, mPassthroughSwitch, mSwipeableSwitch, mForwardLockSwitch, mAbsoluteTrackingSwitch;
     private Spinner mOrientationSpinner;
     private final TextView[] mKeycodeTextviews = new TextView[4];
@@ -166,6 +166,9 @@ public class EditControlSideDialog extends SideDialogView {
         mAbsoluteTrackingSwitch.setVisibility(GONE);
 
         mNameEditText.setText(data.name);
+        internalChanges = true;
+        mCommandEditText.setText(data.command == null ? "" : data.command);
+        internalChanges = false;
         mWidthEditText.setText(String.valueOf(data.getWidth()));
         mHeightEditText.setText(String.valueOf(data.getHeight()));
 
@@ -327,6 +330,7 @@ public class EditControlSideDialog extends SideDialogView {
 
     private void bindLayout() {
         mNameEditText = mDialogContent.findViewById(R.id.editName_editText);
+        mCommandEditText = mDialogContent.findViewById(R.id.editCommand_editText);
         mWidthEditText = mDialogContent.findViewById(R.id.editSize_editTextX);
         mHeightEditText = mDialogContent.findViewById(R.id.editSize_editTextY);
         mToggleSwitch = mDialogContent.findViewById(R.id.checkboxToggle);
@@ -381,6 +385,11 @@ public class EditControlSideDialog extends SideDialogView {
      * @noinspection SuspiciousNameCombination
      */
     private void setupRealTimeListeners() {
+        mCommandEditText.addTextChangedListener((SimpleTextWatcher) s -> {
+            if (internalChanges || mCurrentlyEditedButton == null) return;
+            mCurrentlyEditedButton.getProperties().command = s.toString();
+        });
+
         mNameEditText.addTextChangedListener((SimpleTextWatcher) s -> {
             if (internalChanges) return;
 

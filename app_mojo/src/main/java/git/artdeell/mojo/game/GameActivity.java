@@ -103,7 +103,8 @@ public class GameActivity extends BaseActivity implements ControlButtonMenuListe
     Instance instance;
     Account account;
 
-    private ArrayAdapter<String> gameActionArrayAdapter;
+    private android.widget.BaseAdapter gameActionArrayAdapter;
+    private ScreenRecorder mRecorder;
     private AdapterView.OnItemClickListener gameActionClickListener;
     public ArrayAdapter<String> ingameControlsEditorArrayAdapter;
     public AdapterView.OnItemClickListener ingameControlsEditorListener;
@@ -249,8 +250,9 @@ public class GameActivity extends BaseActivity implements ControlButtonMenuListe
             setTitle("MojoLauncher (" + version + ")");
 
             // Menu
-            gameActionArrayAdapter = new ArrayAdapter<>(this,
-                    android.R.layout.simple_list_item_1, getResources().getStringArray(R.array.menu_ingame));
+            mRecorder = ScreenRecorder.attach(this);
+            gameActionArrayAdapter = new GameMenuAdapter(this,
+                    getResources().getStringArray(R.array.menu_ingame), mRecorder);
             gameActionClickListener = (parent, view, position, id) -> {
                 switch(position) {
                      case 0: dialogForceClose(GameActivity.this); break;
@@ -258,6 +260,14 @@ public class GameActivity extends BaseActivity implements ControlButtonMenuListe
                      case 2: dialogSendCustomKey(); break;
                      case 3: openQuickSettings(); break;
                      case 4: openCustomControls(); break;
+                     case GameMenuAdapter.POS_REC:
+                         drawerLayout.closeDrawers();
+                         mRecorder.toggle();
+                         return;
+                     case GameMenuAdapter.POS_SOURCE: mRecorder.cycleSource(); return;
+                     case GameMenuAdapter.POS_AUDIO: mRecorder.cycleAudio(); return;
+                     case GameMenuAdapter.POS_RES: mRecorder.cycleResolution(); return;
+                     case GameMenuAdapter.POS_FPS: mRecorder.cycleFps(); return;
                 }
                 drawerLayout.closeDrawers();
             };
@@ -362,6 +372,7 @@ public class GameActivity extends BaseActivity implements ControlButtonMenuListe
 
     @Override
     protected void onDestroy() {
+        ScreenRecorder.stopNow();
         super.onDestroy();
         ContextExecutor.clearActivity();
     }
@@ -392,8 +403,15 @@ public class GameActivity extends BaseActivity implements ControlButtonMenuListe
     }
 
     @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        ScreenRecorder.onPermission(requestCode, grantResults);
+    }
+
+    @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        ScreenRecorder.onResult(requestCode, resultCode, data);
 
         if (requestCode == 1 && resultCode == Activity.RESULT_OK) {
             // Reload PREF_DEFAULTCTRL_PATH
