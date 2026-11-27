@@ -53,10 +53,10 @@ public class VoiceService extends Service {
     // ---- API untuk UI ----
 
     /** false kalau sistem menolak menjalankan service */
-    public static boolean join(Context c, String room, String key, int uid, String appId, String dbUrl) {
+    public static boolean join(Context c, String room, String key, int uid, String dbUrl) {
         Intent i = new Intent(c, VoiceService.class).setAction(ACTION_JOIN)
                 .putExtra("room", room).putExtra("key", key).putExtra("uid", uid)
-                .putExtra("appId", appId).putExtra("dbUrl", dbUrl);
+                .putExtra("dbUrl", dbUrl);
         try {
             ContextCompat.startForegroundService(c, i);
             return true;
@@ -168,7 +168,6 @@ public class VoiceService extends Service {
         mRoom = i.getStringExtra("room");
         mKey = i.getStringExtra("key");
         mDbUrl = i.getStringExtra("dbUrl");
-        String appId = i.getStringExtra("appId");
         int uid = i.getIntExtra("uid", 1);
         mMuted = false;
         mRemote = 0;
@@ -179,12 +178,12 @@ public class VoiceService extends Service {
             broadcastState("Tidak bisa menjalankan layanan suara");
             return;
         }
-        if (mRoom == null || mKey == null || appId == null || appId.isEmpty()) {
+        if (mRoom == null || mKey == null || mDbUrl == null) {
             end("Data voice room tidak lengkap");
             return;
         }
         try {
-            mEngine = new AgoraVoiceEngine(this, appId);
+            mEngine = new WebRtcVoiceEngine(this, mDbUrl, mRoom, mKey);
             mEngine.join("mojo_" + mRoom, uid, mListener);
         } catch (Throwable t) {
             mEngine = null;

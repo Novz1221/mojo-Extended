@@ -24,6 +24,6 @@
 # Option screens
  -keep class git.artdeell.mojo.prefs.screens** {*;}
 
-# Agora Voice SDK
--keep class io.agora.** { *; }
--dontwarn io.agora.**
+# WebRTC voice chat
+-keep class org.webrtc.** { *; }
+-dontwarn org.webrtc.**

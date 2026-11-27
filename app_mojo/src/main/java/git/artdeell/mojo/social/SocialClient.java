@@ -27,10 +27,7 @@ public final class SocialClient {
     public static final String PREFS = "social";
     /** Default database, so players do not have to paste a URL */
     public static final String DEFAULT_URL = "https://noba-be394-default-rtdb.asia-southeast1.firebasedatabase.app";
-    /** Agora App ID bawaan (kosong = pemain/pemilik mengisi di tab Akun) */
-    public static final String DEFAULT_AGORA_APP_ID = "8754e8264345474e96d78be881df9b16";
     private static final String KEY_URL = "db_url";
-    private static final String KEY_AGORA = "agora_app_id";
     private static final String KEY_VOICE_HINT = "voice_active";
     private static final String KEY_USER = "user";
     private static final String KEY_SECRET = "secret";
@@ -56,14 +53,6 @@ public final class SocialClient {
         String u = url == null ? "" : url.trim();
         while (u.endsWith("/")) u = u.substring(0, u.length() - 1);
         prefs.edit().putString(KEY_URL, u).apply();
-    }
-
-    public String getAgoraAppId() {
-        return prefs.getString(KEY_AGORA, DEFAULT_AGORA_APP_ID).trim();
-    }
-
-    public void setAgoraAppId(String id) {
-        prefs.edit().putString(KEY_AGORA, id == null ? "" : id.trim()).apply();
     }
 
     /** Petunjuk bahwa voice mungkin masih aktif di proses :voice. Hanya ditulis oleh proses launcher. */

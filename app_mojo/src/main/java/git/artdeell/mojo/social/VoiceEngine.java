@@ -4,7 +4,7 @@ import java.util.Set;
 
 /**
  * Lapisan tipis di atas mesin audio realtime. UI hanya bicara ke interface ini,
- * jadi mesinnya (Agora, WebRTC P2P, LiveKit) bisa diganti tanpa mengubah SocialFragment.
+ * jadi mesinnya (WebRTC P2P, Agora, LiveKit) bisa diganti tanpa mengubah SocialFragment.
  * Semua callback Listener dipanggil di UI thread.
  */
 public interface VoiceEngine {

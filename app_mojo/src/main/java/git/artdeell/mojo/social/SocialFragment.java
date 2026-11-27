@@ -51,7 +51,7 @@ public class SocialFragment extends Fragment {
     public static final String TAG = "SocialFragment";
     private static final int TAB_CHAT = 0, TAB_VOICE = 1, TAB_FRIENDS = 2, TAB_ACCOUNT = 3;
     private static final long POLL_MS = 3000, COOLDOWN_MS = 3000, VOICE_STALE_MS = 90000;
-    /** Pengaman kuota Agora: batas peserta per room. Keluar otomatis diatur di VoiceService. */
+    /** Batas peserta per room (mesh P2P makin berat kalau terlalu banyak). Keluar otomatis diatur di VoiceService. */
     private static final int MAX_VOICE_MEMBERS = 6;
 
     private SocialClient mClient;
@@ -344,15 +344,6 @@ public class SocialFragment extends Fragment {
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(48));
             lp.topMargin = dp(10);
             c.addView(db, lp);
-            TextView ag = button("Agora App ID (voice chat)", false, v ->
-                    M3Dialog.input(requireContext(), "Agora App ID", "App ID dari console.agora.io", null, "Simpan", id -> {
-                        mClient.setAgoraAppId(id);
-                        toast(mClient.getAgoraAppId().isEmpty() ? "App ID dikosongkan" : "App ID disimpan");
-                        return true;
-                    }));
-            LinearLayout.LayoutParams ap = new LinearLayout.LayoutParams(-1, dp(48));
-            ap.topMargin = dp(10);
-            c.addView(ag, ap);
             return c;
         }
         TextView hint = text("Pilih username untuk chat, teman, dan voice room.", 13, R.color.m3_text_dim);
@@ -541,7 +532,7 @@ public class SocialFragment extends Fragment {
         }
     }
 
-    // ---- voice rooms: presence lewat Firebase, audio lewat VoiceEngine (Agora) ----
+    // ---- voice rooms: presence lewat Firebase, audio lewat VoiceEngine (WebRTC P2P) ----
 
     private View buildVoice() {
         return mVoiceRoom != null && !mShowList ? buildCall() : buildVoiceList();
@@ -647,12 +638,8 @@ public class SocialFragment extends Fragment {
         return out;
     }
 
-    /** Cek App ID, kapasitas room, dan izin mikrofon sebelum benar-benar masuk */
+    /** Cek kapasitas room, dan izin mikrofon sebelum benar-benar masuk */
     private void tryJoinVoice(String id) {
-        if (mClient.getAgoraAppId().isEmpty()) {
-            toast("Isi Agora App ID dulu di tab Akun");
-            return;
-        }
         mClient.get("voice/" + id, (json, err) -> {
             if (!isAdded()) return;
             if (err != null) {
@@ -675,7 +662,7 @@ public class SocialFragment extends Fragment {
         });
     }
 
-    /** uid Agora stabil dari nama (sama di semua HP), tidak pernah 0 */
+    /** uid suara stabil dari nama (sama di semua HP), tidak pernah 0 */
     private static int uidFor(String name) {
         int u = SocialClient.key(name).hashCode() & 0x7fffffff;
         return u == 0 ? 1 : u;
@@ -684,8 +671,7 @@ public class SocialFragment extends Fragment {
     /** Voice berjalan di VoiceService, jadi tetap hidup saat layar ini ditutup atau game dimulai */
     private void joinVoice(String id) {
         String user = mClient.getUser();
-        boolean ok = VoiceService.join(requireContext(), id, SocialClient.key(user), uidFor(user),
-                mClient.getAgoraAppId(), mClient.getUrl());
+        boolean ok = VoiceService.join(requireContext(), id, SocialClient.key(user), uidFor(user), mClient.getUrl());
         if (!ok) {
             toast("Tidak bisa memulai layanan suara");
             return;
