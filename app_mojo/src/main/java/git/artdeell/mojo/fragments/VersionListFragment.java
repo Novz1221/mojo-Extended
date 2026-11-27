@@ -2,6 +2,7 @@ package git.artdeell.mojo.fragments;
 
 import android.content.Context;
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -12,6 +13,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
@@ -31,6 +33,7 @@ import git.artdeell.mojo.utils.Fluid;
 import git.artdeell.mojo.extra.ExtraCore;
 import git.artdeell.mojo.instances.Instance;
 import git.artdeell.mojo.instances.InstanceIconProvider;
+import git.artdeell.mojo.instances.MrpackExporter;
 import git.artdeell.mojo.instances.Instances;
 import git.artdeell.mojo.utils.FileUtils;
 import git.artdeell.mojo.utils.M3Dialog;
@@ -38,6 +41,7 @@ import git.artdeell.mojo.utils.profiles.VersionSelectorDialog;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -64,6 +68,10 @@ public class VersionListFragment extends Fragment {
             registerForActivityResult(new OpenDocumentWithExtension("jar"), data -> {
                 if (data != null) Tools.launchModInstaller(requireContext(), data);
             });
+
+    private Instance mExportInstance;
+    private final ActivityResultLauncher<String> mMrpackLauncher =
+            registerForActivityResult(new ActivityResultContracts.CreateDocument(), this::exportMrpackTo);
 
     public VersionListFragment() {
         super(R.layout.fragment_version_list);
@@ -110,6 +118,7 @@ public class VersionListFragment extends Fragment {
         view.findViewById(R.id.vl_install_new).setOnClickListener(v ->
                 Tools.swapFragment(requireActivity(), DownloadFragment.class, DownloadFragment.TAG, null));
         view.findViewById(R.id.vl_folder_more).setOnClickListener(v -> showFolderMenu());
+        view.findViewById(R.id.vl_export_mrpack).setOnClickListener(v -> startMrpackExport());
         updateFilterChips();
 
         Fluid.pressAll(view);
@@ -221,6 +230,37 @@ public class VersionListFragment extends Fragment {
                 default:
                     Tools.swapFragment(requireActivity(), GamepadMapperFragment.class, GamepadMapperFragment.TAG, null);
                     break;
+            }
+        });
+    }
+
+    private void startMrpackExport() {
+        Context context = requireContext();
+        Instance instance = Instances.loadSelectedInstance();
+        if (instance == null) {
+            Toast.makeText(context, R.string.no_instance, Toast.LENGTH_LONG).show();
+            return;
+        }
+        if (!ProgressLayout.ensureNoOngoingTasks(context)) return;
+        mExportInstance = instance;
+        mMrpackLauncher.launch(MrpackExporter.suggestedFileName(displayName(context, instance)));
+    }
+
+    private void exportMrpackTo(@Nullable Uri uri) {
+        Instance instance = mExportInstance;
+        mExportInstance = null;
+        if (uri == null || instance == null || !isAdded()) return;
+        Context context = requireContext().getApplicationContext();
+        String name = displayName(context, instance);
+        Toast.makeText(context, R.string.m3_export_mrpack_busy, Toast.LENGTH_SHORT).show();
+        MojoApplication.sExecutorService.execute(() -> {
+            try (OutputStream out = context.getContentResolver().openOutputStream(uri)) {
+                if (out == null) throw new IOException("Cannot open output");
+                MrpackExporter.export(instance, name, out);
+                Tools.runOnUiThread(() -> Toast.makeText(context, R.string.m3_export_mrpack_done, Toast.LENGTH_LONG).show());
+            } catch (IOException e) {
+                Tools.runOnUiThread(() -> Toast.makeText(context,
+                        context.getString(R.string.m3_export_mrpack_failed, e.getMessage()), Toast.LENGTH_LONG).show());
             }
         });
     }

@@ -583,6 +583,10 @@
     <string name="m3_no_versions">No installed versions</string>
     <string name="m3_launch">Launch</string>
     <string name="m3_default_game">Default Game</string>
+    <string name="m3_export_mrpack">Ekspor Ke Mrpack</string>
+    <string name="m3_export_mrpack_busy">Mengekspor mrpack…</string>
+    <string name="m3_export_mrpack_done">Mrpack berhasil diekspor</string>
+    <string name="m3_export_mrpack_failed">Gagal mengekspor: %1$s</string>
     <string name="m3_more">More</string>
     <string name="m3_add_game_folder">Add Game Folder</string>
     <string name="m3_cleanup">Clean up game files</string>
