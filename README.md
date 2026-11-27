@@ -20,9 +20,9 @@
 * This launcher can launch almost all available Minecraft versions ranging from rd-132211 to 26.x snapshots (including Combat Test versions). 
 * Modding via Forge and Fabric are also supported. 
 
-## Getting MojoLauncher
+## Getting MojoExtended
 
-You can get MojoLauncher via four methods:
+You can get MojoExtended via:
 
  You can get the prebuilt app from the [releases section](http://github.com/mojolauncher/mojolauncher/releases).
 
