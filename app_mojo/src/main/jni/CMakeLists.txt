@@ -1,9 +1,20 @@
 
 cmake_minimum_required(VERSION 3.22.1)
 
+# Folder mojoexec, glfw, dan sdl di sini dulunya symlink ke folder submodule di root repo.
+# Kalau symlink hilang (folder kosong), pakai folder root langsung.
+set(MOJO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../..")
+foreach(dep mojoexec glfw sdl)
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${dep}/CMakeLists.txt")
+        set(DEP_DIR_${dep} "${CMAKE_CURRENT_SOURCE_DIR}/${dep}")
+    else()
+        set(DEP_DIR_${dep} "${MOJO_ROOT}/${dep}")
+    endif()
+endforeach()
+
 # ------ MojoExec ------
 
-add_subdirectory(mojoexec)
+add_subdirectory("${DEP_DIR_mojoexec}" mojoexec)
 
 # ------   GLFW   ------
 
@@ -15,7 +26,7 @@ set(GLFW_BUILD_TESTS    OFF CACHE BOOL "" FORCE)
 set(GLFW_INSTALL        OFF CACHE BOOL "" FORCE)
 set(BUILD_SHARED_LIBS   ON  CACHE BOOL "" FORCE)
 
-add_subdirectory(glfw)
+add_subdirectory("${DEP_DIR_glfw}" glfw)
 
 target_compile_options(glfw PRIVATE -Wno-nullability-completeness)
 
@@ -29,7 +40,7 @@ set(SDL_CAMERA		 OFF CACHE BOOL "" FORCE)
 set(SDL_TESTS		 OFF CACHE BOOL "" FORCE)
 set(SDL_EXAMPLES	 OFF CACHE BOOL "" FORCE)
 set(SDL3_MAINPROJECT OFF CACHE BOOL "" FORCE)
-add_subdirectory(sdl)
+add_subdirectory("${DEP_DIR_sdl}" sdl)
 target_link_libraries(SDL3-shared PRIVATE mojoexec)
 
 # ----------------------
