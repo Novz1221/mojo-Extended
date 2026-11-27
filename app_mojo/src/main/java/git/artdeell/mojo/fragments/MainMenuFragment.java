@@ -65,6 +65,10 @@ public class MainMenuFragment extends Fragment {
             return true;
         });
 
+        view.findViewById(R.id.tile_social).setOnClickListener(v ->
+                Tools.swapFragment(requireActivity(), git.artdeell.mojo.social.SocialFragment.class,
+                        git.artdeell.mojo.social.SocialFragment.TAG, null));
+
         view.findViewById(R.id.home_share_log).setOnClickListener(v -> Tools.shareLog(requireContext()));
 
         view.findViewById(R.id.home_account_area).setOnClickListener(v ->

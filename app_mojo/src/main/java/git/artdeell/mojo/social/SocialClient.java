@@ -1,0 +1,233 @@
+package git.artdeell.mojo.social;
+
+import android.content.Context;
+import android.content.SharedPreferences;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.security.SecureRandom;
+import java.util.Locale;
+
+import git.artdeell.mojo.MojoApplication;
+import git.artdeell.mojo.Tools;
+
+/**
+ * Minimal client for a free Firebase Realtime Database over its REST API.
+ * Needs only the database URL, no SDK and no google-services.json.
+ */
+public final class SocialClient {
+    public static final String PREFS = "social";
+    /** Default database, so players do not have to paste a URL */
+    public static final String DEFAULT_URL = "https://noba-be394-default-rtdb.asia-southeast1.firebasedatabase.app";
+    private static final String KEY_URL = "db_url";
+    private static final String KEY_USER = "user";
+    private static final String KEY_SECRET = "secret";
+
+    public interface Callback {
+        /** error is null on success; json is a JSONObject, JSONArray, String, Number, Boolean or null */
+        void done(Object json, String error);
+    }
+
+    private final SharedPreferences prefs;
+
+    public SocialClient(Context context) {
+        prefs = context.getApplicationContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+    }
+
+    // ---- config and identity ----
+
+    public String getUrl() {
+        return prefs.getString(KEY_URL, DEFAULT_URL);
+    }
+
+    public void setUrl(String url) {
+        String u = url == null ? "" : url.trim();
+        while (u.endsWith("/")) u = u.substring(0, u.length() - 1);
+        prefs.edit().putString(KEY_URL, u).apply();
+    }
+
+    public boolean isConfigured() {
+        return getUrl().startsWith("https://");
+    }
+
+    public String getUser() {
+        return prefs.getString(KEY_USER, "");
+    }
+
+    public boolean isLoggedIn() {
+        return !getUser().isEmpty();
+    }
+
+    public void logout() {
+        prefs.edit().remove(KEY_USER).apply();
+    }
+
+    public static String key(String name) {
+        return name.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9_]", "_");
+    }
+
+    public static boolean validName(String name) {
+        return name != null && name.matches("[A-Za-z0-9_]{3,16}");
+    }
+
+    private String secret() {
+        String s = prefs.getString(KEY_SECRET, null);
+        if (s == null) {
+            byte[] b = new byte[12];
+            new SecureRandom().nextBytes(b);
+            StringBuilder sb = new StringBuilder();
+            for (byte x : b) sb.append(String.format("%02x", x));
+            s = sb.toString();
+            prefs.edit().putString(KEY_SECRET, s).apply();
+        }
+        return s;
+    }
+
+    private String secretHash() {
+        try {
+            byte[] d = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(secret().getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder();
+            for (byte x : d) sb.append(String.format("%02x", x));
+            return sb.toString();
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /** Claims the name when it is free, or signs in when the stored secret matches. */
+    public void login(String name, Callback cb) {
+        if (!validName(name)) {
+            cb.done(null, "Username 3-16 karakter: huruf, angka, garis bawah");
+            return;
+        }
+        String path = "users/" + key(name);
+        get(path, (json, err) -> {
+            if (err != null) {
+                cb.done(null, err);
+                return;
+            }
+            if (json instanceof JSONObject) {
+                String stored = ((JSONObject) json).optString("s");
+                if (!stored.equals(secretHash())) {
+                    cb.done(null, "Username sudah dipakai orang lain");
+                    return;
+                }
+                prefs.edit().putString(KEY_USER, name).apply();
+                cb.done(Boolean.TRUE, null);
+                return;
+            }
+            try {
+                JSONObject o = new JSONObject();
+                o.put("n", name);
+                o.put("s", secretHash());
+                put(path, o, (j, e) -> {
+                    if (e == null) prefs.edit().putString(KEY_USER, name).apply();
+                    cb.done(e == null ? Boolean.TRUE : null, e);
+                });
+            } catch (Exception e) {
+                cb.done(null, String.valueOf(e));
+            }
+        });
+    }
+
+    // ---- REST helpers, all callbacks run on the UI thread ----
+
+    public void get(String path, Callback cb) {
+        request("GET", path, null, cb);
+    }
+
+    public void put(String path, Object body, Callback cb) {
+        request("PUT", path, body, cb);
+    }
+
+    public void post(String path, Object body, Callback cb) {
+        request("POST", path, body, cb);
+    }
+
+    public void delete(String path, Callback cb) {
+        request("DELETE", path, null, cb);
+    }
+
+    public static String q(String s) {
+        try {
+            return URLEncoder.encode("\"" + s + "\"", "UTF-8");
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    private void request(String method, String path, Object body, Callback cb) {
+        final String base = getUrl();
+        MojoApplication.sExecutorService.execute(() -> {
+            Object result = null;
+            String error = null;
+            HttpURLConnection c = null;
+            try {
+                if (!base.startsWith("https://")) throw new IllegalStateException("URL database belum diatur");
+                String full = base + "/" + path + (path.contains("?") ? "" : ".json");
+                if (path.contains("?")) {
+                    int i = path.indexOf('?');
+                    full = base + "/" + path.substring(0, i) + ".json" + path.substring(i);
+                }
+                c = (HttpURLConnection) new URL(full).openConnection();
+                c.setConnectTimeout(8000);
+                c.setReadTimeout(10000);
+                c.setRequestMethod(method);
+                if (body != null) {
+                    byte[] data = (body instanceof String ? JSONObject.quote((String) body) : body.toString())
+                            .getBytes(StandardCharsets.UTF_8);
+                    c.setDoOutput(true);
+                    c.setRequestProperty("Content-Type", "application/json");
+                    try (OutputStream os = c.getOutputStream()) {
+                        os.write(data);
+                    }
+                }
+                int code = c.getResponseCode();
+                InputStream is = code >= 400 ? c.getErrorStream() : c.getInputStream();
+                String text = is == null ? "" : read(is);
+                if (code >= 400) {
+                    error = code == 401 || code == 403 ? "Ditolak oleh aturan database (rules)" : "HTTP " + code;
+                } else {
+                    result = parse(text);
+                }
+            } catch (Exception e) {
+                error = e.getMessage() == null ? e.toString() : e.getMessage();
+            } finally {
+                if (c != null) c.disconnect();
+            }
+            final Object r = result;
+            final String er = error;
+            Tools.runOnUiThread(() -> cb.done(r, er));
+        });
+    }
+
+    private static String read(InputStream is) throws Exception {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        byte[] buf = new byte[4096];
+        int n;
+        while ((n = is.read(buf)) > 0) out.write(buf, 0, n);
+        return out.toString("UTF-8");
+    }
+
+    private static Object parse(String text) {
+        String t = text.trim();
+        if (t.isEmpty() || t.equals("null")) return null;
+        try {
+            if (t.startsWith("{")) return new JSONObject(t);
+            if (t.startsWith("[")) return new JSONArray(t);
+            if (t.startsWith("\"")) return new org.json.JSONTokener(t).nextValue();
+            return t;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+}
