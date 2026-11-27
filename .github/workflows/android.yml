@@ -9,6 +9,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
+    permissions:
+      contents: write
     env:
       UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.UPLOAD_NEXT_KEYSTORE_PASSWORD }}
       MOJOPUB_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_NEXT_KEYSTORE_PASSWORD }}
@@ -78,17 +80,31 @@ jobs:
           md5sum out/app-debug-full.apk > out/app-debug-full.md5
           md5sum out/app-debug-noruntime.apk > out/app-debug-noruntime.md5
 
-      - name: Upload Debug APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-debug
-          path: out/app-debug-full.apk
-
-      - name: Upload Debug APK (No runtime)
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-debug-noruntime
-          path: out/app-debug-noruntime.apk
+      # Debug APKs are uploaded to Pixeldrain (no GitHub artifact quota used).
+      # Needs the repository secret PIXELDRAIN_API_KEY (Settings > Secrets and variables > Actions).
+      - name: Upload Debug APKs to Pixeldrain
+        if: github.event_name != 'pull_request'
+        env:
+          PIXELDRAIN_API_KEY: ${{ secrets.PIXELDRAIN_API_KEY }}
+        run: |
+          if [ -z "$PIXELDRAIN_API_KEY" ]; then
+            echo "::error::Secret PIXELDRAIN_API_KEY is not set"
+            exit 1
+          fi
+          {
+            echo "### Pixeldrain downloads"
+            echo "Commit: ${GITHUB_SHA}"
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+          for f in out/app-debug-full.apk out/app-debug-noruntime.apk; do
+            resp=$(curl --fail --silent --show-error \
+              -u ":${PIXELDRAIN_API_KEY}" \
+              -F "file=@${f}" \
+              https://pixeldrain.com/api/file)
+            id=$(echo "$resp" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
+            echo "$(basename "$f"): https://pixeldrain.com/u/${id}"
+            echo "- $(basename "$f"): https://pixeldrain.com/u/${id}" >> "$GITHUB_STEP_SUMMARY"
+          done
 
       - name: Release Nightly APK
         if: github.repository_owner == 'MojoLauncher' && github.ref_name == 'v3_openjdk'
@@ -104,6 +120,7 @@ jobs:
             out/MojoLauncher-release.apk
 
       - name: Upload AAB
+        if: github.repository_owner == 'MojoLauncher' && github.ref_name == 'v3_openjdk'
         uses: actions/upload-artifact@v4
         with:
           name: app-release-aab
