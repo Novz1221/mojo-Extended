@@ -24,6 +24,8 @@ import android.text.Spanned;
 import android.text.TextUtils;
 import android.text.style.ForegroundColorSpan;
 import android.text.style.ReplacementSpan;
+import android.transition.AutoTransition;
+import android.transition.TransitionManager;
 import android.util.DisplayMetrics;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -79,10 +81,14 @@ public class LyricsOverlay {
     /** kata tetap tampil sampai baris berakhir, ditambah sedikit jeda ini */
     private static final long LINGER_MS = 700;
     private static final int MAX_CHUNKS = 6;
+    /** baris lirik terakhir tetap tampil selama jeda instrumental, lalu kembali ke judul lagu */
+    private static final long GAP_HOLD_MS = 2500;
     private static final int MAX_WORDS_PER_TICK = 2;
     private static final int CHUNK_MAX_CHARS = 11, CHUNK_MAX_WORDS = 3;
 
     private static final int HILITE_BG = 0xFF8B5CF6;
+    /** kata melengkung di layar. false = hanya lirik di pill (set true untuk menyalakan lagi) */
+    private static final boolean SHOW_FLOATING_WORDS = false;
 
     // slot: {kiri (fraksi lebar), baseline (fraksi tinggi), rotasi derajat, ukuran sp}
     private static final float[][] SLOTS = {
@@ -118,6 +124,7 @@ public class LyricsOverlay {
     private TextView pillText;
     private Equalizer eq;
     private TextView toggleBtn;
+    private LyricLineView lineView;
     private int pillMaxW;
     private String pillKey = "";
 
@@ -141,7 +148,7 @@ public class LyricsOverlay {
     private int curLine = -2, shown, slotIdx;
     private List<Word> curWords;
     private String[] curToks;
-    private long lineEndAt, lastWordAt;
+    private long lineEndAt, lastWordAt, gapAt;
     private WordsView.Chunk curChunk;
     private int curChunkWords;
 
@@ -173,7 +180,7 @@ public class LyricsOverlay {
         root.addView(wv, new FrameLayout.LayoutParams(-1, -1));
 
         DisplayMetrics dm = act.getResources().getDisplayMetrics();
-        pillMaxW = (int) Math.min(dp(380), dm.widthPixels * 0.62f);
+        pillMaxW = (int) Math.min(dp(420), dm.widthPixels * 0.66f);
         buildPill();
         FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.CENTER_HORIZONTAL);
         lp.topMargin = dp(6);
@@ -214,6 +221,12 @@ public class LyricsOverlay {
         LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(-2, -2);
         tp.setMarginStart(dp(8));
         pill.addView(pillText, tp);
+
+        lineView = new LyricLineView(act, font, pillMaxW);
+        LinearLayout.LayoutParams lvp = new LinearLayout.LayoutParams(pillMaxW, dp(24));
+        lvp.setMarginStart(dp(8));
+        pill.addView(lineView, lvp);
+        lineView.setVisibility(View.GONE);
 
         eq = new Equalizer(act);
         LinearLayout.LayoutParams ep = new LinearLayout.LayoutParams(dp(14), dp(14));
@@ -261,10 +274,15 @@ public class LyricsOverlay {
     /** Pill mode judul + artis. */
     private void updatePill() {
         if (title.isEmpty()) {
+            lineView.stop();
             pill.setVisibility(View.GONE);
             pillKey = "";
             return;
         }
+        if (pillKey.startsWith("L|")) animateModeChange();
+        lineView.stop();
+        lineView.setVisibility(View.GONE);
+        pillText.setVisibility(View.VISIBLE);
         String key = "T|" + title + "|" + artist;
         if (!key.equals(pillKey)) {
             pillKey = key;
@@ -289,44 +307,30 @@ public class LyricsOverlay {
         pill.setVisibility(View.VISIBLE);
     }
 
-    /** Pill mode lirik: seluruh baris, kata ke-hi disorot dengan kotak ungu. */
-    private void updatePillLine(String[] toks, int hi) {
+    /** Animasi lebar pill saat pindah antara mode judul dan mode lirik. */
+    private void animateModeChange() {
+        try {
+            AutoTransition t = new AutoTransition();
+            t.setDuration(240);
+            TransitionManager.beginDelayedTransition(root, t);
+        } catch (Throwable ignored) { }
+    }
+
+    /** Pill mode lirik: kata aktif dihitung tiap frame oleh LyricLineView dari waktu lagu. */
+    private void updatePillLine(String[] toks, long[] starts) {
         if (toks == null || toks.length == 0) {
             updatePill();
             return;
         }
-        String key = "L|" + curLine + "|" + hi;
+        String key = "L|" + curLine;
         if (key.equals(pillKey)) return;
+        boolean wasLyric = pillKey.startsWith("L|");
         pillKey = key;
-
-        StringBuilder plain = new StringBuilder();
-        for (int i = 0; i < toks.length; i++) {
-            if (i > 0) plain.append(' ');
-            plain.append(toks[i].toUpperCase(Locale.getDefault()));
-        }
-        String full = plain.toString();
-
-        // kecilkan teks supaya satu baris muat di pill
-        float sp = 12f;
-        Paint mp = new Paint(Paint.ANTI_ALIAS_FLAG);
-        if (font != null) mp.setTypeface(font);
-        mp.setTextSize(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, sp, act.getResources().getDisplayMetrics()));
-        float need = mp.measureText(full) + dp(10);
-        if (need > pillMaxW) sp = Math.max(8f, sp * pillMaxW / need);
-        pillText.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp);
-
-        SpannableStringBuilder sb = new SpannableStringBuilder(full);
-        sb.setSpan(new ForegroundColorSpan(0xFFFFFFFF), 0, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        if (hi >= 0 && hi < toks.length) {
-            int s = 0;
-            for (int i = 0; i < hi; i++) s += toks[i].length() + 1;
-            int e = s + toks[hi].length();
-            if (e <= sb.length() && s < e) {
-                sb.setSpan(new ChipSpan(HILITE_BG, dp(3), dp(4)), s, e, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-            }
-        }
-        pillText.setText(sb);
+        if (!wasLyric) animateModeChange();
+        pillText.setVisibility(View.GONE);
+        lineView.setVisibility(View.VISIBLE);
         pill.setVisibility(View.VISIBLE);
+        lineView.setLine(toks, starts, () -> position() + OFFSET_MS);
     }
 
     private int dp(float v) {
@@ -545,7 +549,15 @@ public class LyricsOverlay {
         } else if (curWords != null && shown > 0 && pos < curWords.get(shown - 1).start - 500) {
             enterLine(idx, pos); // geser mundur
         }
-        if (curWords == null) return;
+        if (curWords == null) {
+            // jeda instrumental: baris terakhir tetap tampil sebentar, lalu pill kembali ke judul
+            if (gapAt > 0 && SystemClock.uptimeMillis() - gapAt > GAP_HOLD_MS && pillKey.startsWith("L|")) {
+                gapAt = 0;
+                pillKey = "";
+                updatePill();
+            }
+            return;
+        }
 
         long now = SystemClock.uptimeMillis();
         int n = 0;
@@ -557,7 +569,6 @@ public class LyricsOverlay {
             lastWordAt = now;
             now += MIN_WORD_GAP_MS; // dua kata dalam satu tick tetap diberi jarak
         }
-        if (n > 0) updatePillLine(curToks, shown - 1);
 
         // baris sudah selesai -> kata memudar setelah jeda singkat
         if (shown >= curWords.size() && pos > lineEndAt + LINGER_MS) {
@@ -590,6 +601,7 @@ public class LyricsOverlay {
         curToks = null;
         shown = 0;
         if (idx < 0) {
+            gapAt = 0;
             pillKey = "";
             updatePill();
             return;
@@ -597,10 +609,11 @@ public class LyricsOverlay {
         LyricsClient.Line ln = lines.get(idx);
         String txt = ln.text.trim();
         if (txt.isEmpty()) {
-            pillKey = "";
-            updatePill();
+            // baris kosong (jeda): biarkan baris sebelumnya tetap tampil dulu
+            gapAt = SystemClock.uptimeMillis();
             return;
         }
+        gapAt = 0;
         String[] toks = txt.split("\\s+");
         long next = idx + 1 < lines.size() ? lines.get(idx + 1).t : ln.t + 4000;
         long dur = Math.max(800, Math.min(next - ln.t, 6000));
@@ -620,12 +633,15 @@ public class LyricsOverlay {
         for (int i = 0; i < ws.size(); i++) if (ws.get(i).start <= pos) already = i + 1;
         // masuk di tengah baris (misalnya setelah geser lagu): mulai dari kata terbaru saja
         shown = (pos - ln.t > 1200) ? Math.max(already - 1, 0) : 0;
-        updatePillLine(toks, -1);
+        long[] st = new long[ws.size()];
+        for (int i = 0; i < st.length; i++) st[i] = ws.get(i).start;
+        updatePillLine(toks, st);
     }
 
     // ---- kata ----
 
     private void showWord(String text) {
+        if (!SHOW_FLOATING_WORDS) return;
         String w = text.toUpperCase(Locale.getDefault());
         DisplayMetrics dm = act.getResources().getDisplayMetrics();
         int W = root.getWidth() > 0 ? root.getWidth() : dm.widthPixels;
@@ -706,6 +722,221 @@ public class LyricsOverlay {
             paint.setColor(0xFFFFFFFF);
             canvas.drawText(text, start, end, x + pad, y, paint);
             paint.setColor(old);
+        }
+    }
+
+    // ---- satu baris lirik di pill (meniru video):
+    //  - kata yang sudah dinyanyikan putih, yang belum redup
+    //  - kotak ungu meluncur halus ke kata yang sedang dinyanyikan (dihitung tiap frame dari waktu lagu)
+    //  - baris panjang bergeser halus ke kiri mengikuti kotak
+    //  - ganti baris: baris lama memudar naik, baris baru memudar masuk dari bawah
+
+    private static final class LyricLineView extends View {
+
+        interface Clock {
+            long pos();
+        }
+
+        private static final class Ln {
+            String text = "";
+            int[] s = new int[0], e = new int[0];
+            long[] t = new long[0];
+            float textW, off;
+        }
+
+        private static final int COL_DIM = 0xFFA9A3C4;
+
+        private final Paint tp = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint chip = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint.FontMetrics fm = new Paint.FontMetrics();
+        private final RectF rect = new RectF();
+        private final float pad, slide, radius, vw;
+        private final int viewW;
+
+        private Ln cur = new Ln(), prev;
+        private Clock clock;
+        private int hi = -1;
+        private float chipL, chipR, tgtL, tgtR, chipA, scroll, tgtScroll, lineA = 1f;
+        private boolean chipOn, running, tracking;
+        private long fadeStart, lastFrame;
+
+        LyricLineView(Context c, Typeface tf, int widthPx) {
+            super(c);
+            DisplayMetrics dm = c.getResources().getDisplayMetrics();
+            float d = dm.density;
+            viewW = widthPx;
+            pad = 4f * d;
+            slide = 6f * d;
+            radius = 5f * d;
+            vw = widthPx - 2f * pad;
+            if (tf != null) tp.setTypeface(tf);
+            tp.setTextSize(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 12, dm));
+            chip.setColor(HILITE_BG);
+        }
+
+        /** Mulai baris baru. starts = waktu mulai tiap kata (ms, sama dengan skala clock). */
+        void setLine(String[] toks, long[] starts, Clock c) {
+            Ln n = new Ln();
+            StringBuilder sb = new StringBuilder();
+            n.s = new int[toks.length];
+            n.e = new int[toks.length];
+            n.t = starts;
+            for (int i = 0; i < toks.length; i++) {
+                if (i > 0) sb.append(' ');
+                n.s[i] = sb.length();
+                sb.append(toks[i].toUpperCase(Locale.getDefault()));
+                n.e[i] = sb.length();
+            }
+            n.text = sb.toString();
+            n.textW = tp.measureText(n.text);
+            n.off = n.textW <= vw ? (vw - n.textW) / 2f : 0f;
+
+            prev = cur.text.isEmpty() ? null : cur;
+            cur = n;
+            clock = c;
+            hi = -1;
+            chipOn = false;
+            chipA = 0f;
+            scroll = tgtScroll = 0f;
+            lineA = 0f;
+            fadeStart = SystemClock.uptimeMillis();
+            tracking = true;
+            kick();
+        }
+
+        void stop() {
+            tracking = false;
+        }
+
+        private void kick() {
+            if (!running) {
+                running = true;
+                lastFrame = SystemClock.uptimeMillis();
+                postOnAnimation(step);
+            }
+        }
+
+        private void retarget() {
+            if (hi >= 0 && hi < cur.s.length) {
+                tgtL = tp.measureText(cur.text, 0, cur.s[hi]);
+                tgtR = tgtL + tp.measureText(cur.text, cur.s[hi], cur.e[hi]);
+                if (!chipOn) {
+                    chipL = tgtL;
+                    chipR = tgtR;
+                    chipOn = true;
+                }
+                tgtScroll = cur.textW <= vw ? 0f
+                        : Math.max(0f, Math.min((tgtL + tgtR) / 2f - vw * 0.55f, cur.textW - vw));
+            } else {
+                chipOn = false;
+            }
+        }
+
+        private final Runnable step = new Runnable() {
+            @Override
+            public void run() {
+                long now = SystemClock.uptimeMillis();
+                float dt = Math.max(1f, Math.min(64f, now - lastFrame));
+                lastFrame = now;
+
+                boolean changed = false;
+                if (tracking && clock != null && cur.t.length > 0) {
+                    long p = clock.pos();
+                    int nh = -1;
+                    for (int i = 0; i < cur.t.length; i++) {
+                        if (cur.t[i] <= p) nh = i;
+                        else break;
+                    }
+                    if (nh != hi) {
+                        hi = nh;
+                        retarget();
+                        changed = true;
+                    }
+                }
+
+                lineA = Math.min(1f, (now - fadeStart) / 260f);
+                if (lineA >= 1f) prev = null;
+                float k1 = 1f - (float) Math.exp(-dt / 55f);   // kotak
+                float k2 = 1f - (float) Math.exp(-dt / 150f);  // geser teks
+                float k3 = 1f - (float) Math.exp(-dt / 90f);   // kotak muncul/hilang
+                chipL += (tgtL - chipL) * k1;
+                chipR += (tgtR - chipR) * k1;
+                scroll += (tgtScroll - scroll) * k2;
+                float goal = chipOn ? 1f : 0f;
+                chipA += (goal - chipA) * k3;
+
+                boolean busy = lineA < 1f
+                        || Math.abs(tgtL - chipL) > 0.4f || Math.abs(tgtR - chipR) > 0.4f
+                        || Math.abs(tgtScroll - scroll) > 0.4f
+                        || Math.abs(goal - chipA) > 0.02f;
+                if (busy || changed) invalidate();
+                if (busy) {
+                    postOnAnimation(this);
+                } else {
+                    chipL = tgtL;
+                    chipR = tgtR;
+                    scroll = tgtScroll;
+                    chipA = goal;
+                    if (tracking) {
+                        postDelayed(this, 40); // cek kata berikutnya tanpa menggambar ulang
+                    } else {
+                        running = false;
+                        invalidate();
+                    }
+                }
+            }
+        };
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            if (cur.text.isEmpty()) return;
+            tp.getFontMetrics(fm);
+            float y = getHeight() / 2f - (fm.ascent + fm.descent) / 2f;
+            canvas.save();
+            canvas.clipRect(0, 0, getWidth(), getHeight());
+
+            if (prev != null && lineA < 1f) {
+                canvas.save();
+                canvas.translate(0f, -lineA * slide);
+                tp.setColor(0xFFFFFFFF);
+                tp.setAlpha((int) (255 * (1f - lineA)));
+                canvas.drawText(prev.text, pad + prev.off, y, tp);
+                canvas.restore();
+            }
+
+            canvas.save();
+            canvas.translate(0f, (1f - lineA) * slide);
+            float x0 = pad + cur.off - scroll;
+            if (chipA > 0.02f && chipR > chipL) {
+                rect.set(x0 + chipL - pad, y + fm.ascent - pad * 0.25f,
+                        x0 + chipR + pad, y + fm.descent + pad * 0.25f);
+                chip.setAlpha((int) (255 * lineA * chipA));
+                canvas.drawRoundRect(rect, radius, radius, chip);
+            }
+            int len = cur.text.length();
+            int a = hi < 0 ? 0 : cur.s[Math.min(hi, cur.s.length - 1)];
+            int b = hi < 0 ? 0 : cur.e[Math.min(hi, cur.e.length - 1)];
+            // sudah dinyanyikan + kata aktif: putih
+            if (a > 0 || b > 0) {
+                tp.setColor(0xFFFFFFFF);
+                tp.setAlpha((int) (255 * lineA));
+                canvas.drawText(cur.text, 0, b, x0, y, tp);
+            }
+            // belum dinyanyikan: redup
+            if (b < len) {
+                tp.setColor(COL_DIM);
+                tp.setAlpha((int) (200 * lineA));
+                canvas.drawText(cur.text, b, len, x0 + tp.measureText(cur.text, 0, b), y, tp);
+            }
+            canvas.restore();
+            canvas.restore();
+        }
+
+        @Override
+        protected void onDetachedFromWindow() {
+            super.onDetachedFromWindow();
+            running = false;
+            removeCallbacks(step);
         }
     }
 
