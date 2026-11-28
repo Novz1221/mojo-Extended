@@ -5,7 +5,9 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Canvas;
+import android.graphics.Matrix;
 import android.graphics.Paint;
+import android.graphics.Path;
 import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
@@ -21,6 +23,7 @@ import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.TextUtils;
 import android.text.style.ForegroundColorSpan;
+import android.text.style.ReplacementSpan;
 import android.util.DisplayMetrics;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -37,6 +40,7 @@ import androidx.core.app.NotificationManagerCompat;
 import androidx.core.content.res.ResourcesCompat;
 
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Random;
@@ -44,8 +48,13 @@ import java.util.Random;
 import git.artdeell.mojo.R;
 
 /**
- * Overlay di dalam game: pill lagu yang sedang diputar (judul, artis, equalizer)
- * dan lirik yang muncul kata per kata di tengah layar.
+ * Overlay di dalam game: pill lagu (judul/artis, atau baris lirik dengan kata
+ * yang sedang dinyanyikan disorot) dan lirik melengkung yang muncul per kata
+ * di atas layar, lalu hilang saat baris berganti.
+ *
+ * Semua kata digambar di SATU View lewat Canvas (tanpa TextView/animator per
+ * kata) dan seluruh pekerjaan diberi jeda (throttle) supaya tidak membebani
+ * thread UI game dan tidak gampang crash.
  *
  * Lagu dibaca dari sesi media Android (Spotify atau pemutar apa pun), jadi butuh
  * akses notifikasi untuk NowPlayingListener. Lirik dari LRCLIB.
@@ -56,10 +65,33 @@ public class LyricsOverlay {
     public static final String PREF_KEY = "lyricsOverlay";
     private static final String WORDS_PREFS = "lyrics_overlay", WORDS_KEY = "words";
 
-    private static final long TICK_MS = 120, OFFSET_MS = 150, HOLD_MS = 1500;
-    private static final int MAX_LIVE = 5;
+    // ---- pengaturan delay / batas (naikkan angka delay kalau masih berat) ----
+    /** jeda ticker logika lirik */
+    private static final long TICK_MS = 150;
+    /** jeda antar frame gambar kata (33 ms = ~30 fps) */
+    private static final long FRAME_MS = 33;
+    /** jarak minimal antar kemunculan kata */
+    private static final long MIN_WORD_GAP_MS = 110;
+    /** tunda ambil lirik saat lagu ganti cepat (skip berkali-kali) */
+    private static final long FETCH_DEBOUNCE_MS = 450;
+    private static final long OFFSET_MS = 150;
+    private static final long FADE_IN_MS = 170, FADE_OUT_MS = 260;
+    /** kata tetap tampil sampai baris berakhir, ditambah sedikit jeda ini */
+    private static final long LINGER_MS = 700;
+    private static final int MAX_CHUNKS = 6;
+    private static final int MAX_WORDS_PER_TICK = 2;
+    private static final int CHUNK_MAX_CHARS = 11, CHUNK_MAX_WORDS = 3;
+
+    private static final int HILITE_BG = 0xFF8B5CF6;
+
+    // slot: {kiri (fraksi lebar), baseline (fraksi tinggi), rotasi derajat, ukuran sp}
     private static final float[][] SLOTS = {
-            {0.30f, 0.28f}, {0.62f, 0.36f}, {0.38f, 0.50f}, {0.66f, 0.54f}, {0.50f, 0.40f}
+            {0.04f, 0.22f, 9f, 22f},
+            {0.31f, 0.30f, 4f, 22f},
+            {0.60f, 0.29f, -5f, 16f},
+            {0.04f, 0.45f, 8f, 25f},
+            {0.30f, 0.53f, 2f, 19f},
+            {0.58f, 0.47f, -4f, 17f}
     };
 
     private static final class Word {
@@ -79,11 +111,15 @@ public class LyricsOverlay {
     private final LyricsClient client;
     private final Random rnd = new Random();
 
-    private final FrameLayout root, wordLayer;
+    private final FrameLayout root;
+    private final WordsView wv;
     private LinearLayout pill;
     private ImageView icon;
     private TextView pillText;
     private Equalizer eq;
+    private TextView toggleBtn;
+    private int pillMaxW;
+    private String pillKey = "";
 
     // sesi media
     private MediaSessionManager msm;
@@ -99,11 +135,15 @@ public class LyricsOverlay {
     private float speed = 1f;
     private boolean playing;
     private List<LyricsClient.Line> lines;
+    private Runnable pendingFetch;
 
     // lirik yang sedang tampil
-    private int curLine = -2, shown, slotIdx, wordCounter;
+    private int curLine = -2, shown, slotIdx;
     private List<Word> curWords;
-    private final List<TextView> live = new ArrayList<>();
+    private String[] curToks;
+    private long lineEndAt, lastWordAt;
+    private WordsView.Chunk curChunk;
+    private int curChunkWords;
 
     public LyricsOverlay(Activity activity, ViewGroup host) {
         act = activity;
@@ -111,8 +151,13 @@ public class LyricsOverlay {
         wordsOn = prefs.getBoolean(WORDS_KEY, true);
         Typeface f = null;
         try {
-            f = ResourcesCompat.getFont(act, R.font.minecraft_ten);
+            f = ResourcesCompat.getFont(act, R.font.noto_sans_bold);
         } catch (Throwable ignored) { }
+        if (f == null) {
+            try {
+                f = ResourcesCompat.getFont(act, R.font.minecraft_ten);
+            } catch (Throwable ignored) { }
+        }
         font = f;
         client = new LyricsClient(act);
 
@@ -124,8 +169,11 @@ public class LyricsOverlay {
             }
         };
         host.addView(root, new FrameLayout.LayoutParams(-1, -1));
-        wordLayer = new FrameLayout(act);
-        root.addView(wordLayer, new FrameLayout.LayoutParams(-1, -1));
+        wv = new WordsView(act, font);
+        root.addView(wv, new FrameLayout.LayoutParams(-1, -1));
+
+        DisplayMetrics dm = act.getResources().getDisplayMetrics();
+        pillMaxW = (int) Math.min(dp(380), dm.widthPixels * 0.62f);
         buildPill();
         FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.CENTER_HORIZONTAL);
         lp.topMargin = dp(6);
@@ -134,7 +182,7 @@ public class LyricsOverlay {
         start();
     }
 
-    // ---- tampilan ----
+    // ---- tampilan pill ----
 
     private void buildPill() {
         pill = new LinearLayout(act);
@@ -144,7 +192,7 @@ public class LyricsOverlay {
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(0xE60E0E14);
         bg.setCornerRadius(dp(20));
-        bg.setStroke(dp(1), 0xFF6B4FD8);
+        bg.setStroke(dp(1), 0xFF3A3358);
         pill.setBackground(bg);
 
         icon = new ImageView(act);
@@ -155,13 +203,13 @@ public class LyricsOverlay {
         icon.setOutlineProvider(ViewOutlineProvider.BACKGROUND);
         icon.setClipToOutline(true);
         icon.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        pill.addView(icon, new LinearLayout.LayoutParams(dp(20), dp(20)));
+        pill.addView(icon, new LinearLayout.LayoutParams(dp(22), dp(22)));
 
         pillText = new TextView(act);
         pillText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
         pillText.setSingleLine(true);
         pillText.setEllipsize(TextUtils.TruncateAt.END);
-        pillText.setMaxWidth(dp(200));
+        pillText.setMaxWidth(pillMaxW);
         if (font != null) pillText.setTypeface(font);
         LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(-2, -2);
         tp.setMarginStart(dp(8));
@@ -172,43 +220,112 @@ public class LyricsOverlay {
         ep.setMarginStart(dp(8));
         pill.addView(eq, ep);
 
-        pill.setOnClickListener(v -> {
-            wordsOn = !wordsOn;
-            prefs.edit().putBoolean(WORDS_KEY, wordsOn).apply();
-            if (!wordsOn) fadeAllWords();
-            curLine = -2;
-            applyTint();
-            Toast.makeText(act, wordsOn ? "Lirik: nyala" : "Lirik: mati", Toast.LENGTH_SHORT).show();
-        });
+        // tombol on/off lirik
+        toggleBtn = new TextView(act);
+        toggleBtn.setText("LIRIK");
+        toggleBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9);
+        toggleBtn.setGravity(Gravity.CENTER);
+        toggleBtn.setPadding(dp(7), dp(3), dp(7), dp(3));
+        if (font != null) toggleBtn.setTypeface(font);
+        toggleBtn.setClickable(true);
+        toggleBtn.setOnClickListener(v -> toggleWords());
+        LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(-2, -2);
+        bp.setMarginStart(dp(8));
+        pill.addView(toggleBtn, bp);
+
         applyTint();
+    }
+
+    private void toggleWords() {
+        wordsOn = !wordsOn;
+        prefs.edit().putBoolean(WORDS_KEY, wordsOn).apply();
+        if (!wordsOn) clearWords();
+        curLine = -2;
+        pillKey = "";
+        applyTint();
+        updatePill();
+        Toast.makeText(act, wordsOn ? "Lirik: nyala" : "Lirik: mati", Toast.LENGTH_SHORT).show();
     }
 
     private void applyTint() {
         pillText.setAlpha(wordsOn ? 1f : 0.55f);
         eq.setColor(wordsOn ? 0xFFB58CFF : 0xFF777777);
+        GradientDrawable b = new GradientDrawable();
+        b.setCornerRadius(dp(10));
+        b.setColor(wordsOn ? HILITE_BG : 0xFF2A2A34);
+        toggleBtn.setBackground(b);
+        toggleBtn.setTextColor(wordsOn ? 0xFFFFFFFF : 0xFF8A8A98);
+        toggleBtn.setText(wordsOn ? "LIRIK ON" : "LIRIK OFF");
     }
 
+    /** Pill mode judul + artis. */
     private void updatePill() {
         if (title.isEmpty()) {
             pill.setVisibility(View.GONE);
+            pillKey = "";
             return;
         }
-        SpannableStringBuilder sb = new SpannableStringBuilder(title);
+        String key = "T|" + title + "|" + artist;
+        if (!key.equals(pillKey)) {
+            pillKey = key;
+            SpannableStringBuilder sb = new SpannableStringBuilder(title);
+            sb.setSpan(new ForegroundColorSpan(0xFFFFFFFF), 0, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            if (!artist.isEmpty()) {
+                int s = sb.length();
+                sb.append("  ").append(artist);
+                sb.setSpan(new ForegroundColorSpan(0xFFA8A8B8), s, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            }
+            pillText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+            pillText.setText(sb);
+            try {
+                if (ctrl != null) {
+                    Drawable d = act.getPackageManager().getApplicationIcon(ctrl.getPackageName());
+                    icon.setImageDrawable(d);
+                }
+            } catch (Throwable ignored) {
+                icon.setImageDrawable(null);
+            }
+        }
+        pill.setVisibility(View.VISIBLE);
+    }
+
+    /** Pill mode lirik: seluruh baris, kata ke-hi disorot dengan kotak ungu. */
+    private void updatePillLine(String[] toks, int hi) {
+        if (toks == null || toks.length == 0) {
+            updatePill();
+            return;
+        }
+        String key = "L|" + curLine + "|" + hi;
+        if (key.equals(pillKey)) return;
+        pillKey = key;
+
+        StringBuilder plain = new StringBuilder();
+        for (int i = 0; i < toks.length; i++) {
+            if (i > 0) plain.append(' ');
+            plain.append(toks[i].toUpperCase(Locale.getDefault()));
+        }
+        String full = plain.toString();
+
+        // kecilkan teks supaya satu baris muat di pill
+        float sp = 12f;
+        Paint mp = new Paint(Paint.ANTI_ALIAS_FLAG);
+        if (font != null) mp.setTypeface(font);
+        mp.setTextSize(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, sp, act.getResources().getDisplayMetrics()));
+        float need = mp.measureText(full) + dp(10);
+        if (need > pillMaxW) sp = Math.max(8f, sp * pillMaxW / need);
+        pillText.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp);
+
+        SpannableStringBuilder sb = new SpannableStringBuilder(full);
         sb.setSpan(new ForegroundColorSpan(0xFFFFFFFF), 0, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        if (!artist.isEmpty()) {
-            int s = sb.length();
-            sb.append("  ").append(artist);
-            sb.setSpan(new ForegroundColorSpan(0xFFA8A8B8), s, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        if (hi >= 0 && hi < toks.length) {
+            int s = 0;
+            for (int i = 0; i < hi; i++) s += toks[i].length() + 1;
+            int e = s + toks[hi].length();
+            if (e <= sb.length() && s < e) {
+                sb.setSpan(new ChipSpan(HILITE_BG, dp(3), dp(4)), s, e, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            }
         }
         pillText.setText(sb);
-        try {
-            if (ctrl != null) {
-                Drawable d = act.getPackageManager().getApplicationIcon(ctrl.getPackageName());
-                icon.setImageDrawable(d);
-            }
-        } catch (Throwable ignored) {
-            icon.setImageDrawable(null);
-        }
         pill.setVisibility(View.VISIBLE);
     }
 
@@ -275,6 +392,9 @@ public class LyricsOverlay {
             title = artist = album = "";
             lyricsKey = null;
             lines = null;
+            cancelFetch();
+            clearWords();
+            pillKey = "";
             updatePill();
             updateTicker();
             return;
@@ -306,6 +426,13 @@ public class LyricsOverlay {
         return s == null ? "" : s.trim();
     }
 
+    private void cancelFetch() {
+        if (pendingFetch != null) {
+            h.removeCallbacks(pendingFetch);
+            pendingFetch = null;
+        }
+    }
+
     private void readMeta() {
         MediaMetadata m = ctrl == null ? null : ctrl.getMetadata();
         if (m == null) return;
@@ -314,21 +441,38 @@ public class LyricsOverlay {
         if (artist.isEmpty()) artist = nz(m.getString(MediaMetadata.METADATA_KEY_ALBUM_ARTIST));
         album = nz(m.getString(MediaMetadata.METADATA_KEY_ALBUM));
         durMs = m.getLong(MediaMetadata.METADATA_KEY_DURATION);
-        updatePill();
 
         String key = LyricsClient.keyOf(title, artist, durMs);
-        if (key.equals(lyricsKey)) return;
+        if (key.equals(lyricsKey)) {
+            updatePill();
+            return;
+        }
         lyricsKey = key;
         lines = null;
         curLine = -2;
-        fadeAllWords();
+        clearWords();
+        pillKey = "";
+        updatePill();
+        cancelFetch();
         if (title.isEmpty()) return;
-        client.fetch(title, artist, album, durMs, (k, ls) -> {
-            if (!k.equals(lyricsKey)) return;
-            lines = ls;
-            curLine = -2;
-            updateTicker();
-        });
+
+        // tunda sebentar: kalau user skip lagu berkali-kali, hanya yang terakhir diambil
+        final String fTitle = title, fArtist = artist, fAlbum = album;
+        final long fDur = durMs;
+        final String fKey = key;
+        pendingFetch = () -> {
+            pendingFetch = null;
+            if (!fKey.equals(lyricsKey)) return;
+            try {
+                client.fetch(fTitle, fArtist, fAlbum, fDur, (k, ls) -> {
+                    if (!k.equals(lyricsKey)) return;
+                    lines = ls;
+                    curLine = -2;
+                    updateTicker();
+                });
+            } catch (Throwable ignored) { }
+        };
+        h.postDelayed(pendingFetch, FETCH_DEBOUNCE_MS);
     }
 
     private void readState(PlaybackState s) {
@@ -362,8 +506,12 @@ public class LyricsOverlay {
                 ticking = false;
                 return;
             }
-            eq.step();
-            onTick();
+            try {
+                eq.step();
+                onTick();
+            } catch (Throwable ignored) {
+                // jangan sampai overlay lirik membuat game crash
+            }
             h.postDelayed(this, TICK_MS);
         }
     };
@@ -374,7 +522,11 @@ public class LyricsOverlay {
 
     private void updateTicker() {
         eq.setPlaying(playing);
-        if (!playing) fadeAllWords();
+        if (!playing) {
+            clearWords();
+            pillKey = "";
+            updatePill();
+        }
         if (shouldTick() && !ticking) {
             ticking = true;
             h.post(tick);
@@ -382,7 +534,10 @@ public class LyricsOverlay {
     }
 
     private void onTick() {
-        if (!wordsOn || lines == null || lines.isEmpty()) return;
+        if (!wordsOn || lines == null || lines.isEmpty()) {
+            if (!pillKey.startsWith("T|")) updatePill();
+            return;
+        }
         long pos = position() + OFFSET_MS;
         int idx = lineIndexAt(pos);
         if (idx != curLine) {
@@ -391,9 +546,23 @@ public class LyricsOverlay {
             enterLine(idx, pos); // geser mundur
         }
         if (curWords == null) return;
-        while (shown < curWords.size() && curWords.get(shown).start <= pos) {
-            showWord(curWords.get(shown).text, wordCounter++);
+
+        long now = SystemClock.uptimeMillis();
+        int n = 0;
+        while (shown < curWords.size() && curWords.get(shown).start <= pos
+                && n < MAX_WORDS_PER_TICK && now - lastWordAt >= MIN_WORD_GAP_MS) {
+            showWord(curWords.get(shown).text);
             shown++;
+            n++;
+            lastWordAt = now;
+            now += MIN_WORD_GAP_MS; // dua kata dalam satu tick tetap diberi jarak
+        }
+        if (n > 0) updatePillLine(curToks, shown - 1);
+
+        // baris sudah selesai -> kata memudar setelah jeda singkat
+        if (shown >= curWords.size() && pos > lineEndAt + LINGER_MS) {
+            wv.fadeAll();
+            curChunk = null;
         }
     }
 
@@ -412,14 +581,26 @@ public class LyricsOverlay {
     }
 
     private void enterLine(int idx, long pos) {
-        fadeAllWords();
+        wv.fadeAll();
+        curChunk = null;
+        curChunkWords = 0;
+        slotIdx = 0;
         curLine = idx;
         curWords = null;
+        curToks = null;
         shown = 0;
-        if (idx < 0) return;
+        if (idx < 0) {
+            pillKey = "";
+            updatePill();
+            return;
+        }
         LyricsClient.Line ln = lines.get(idx);
         String txt = ln.text.trim();
-        if (txt.isEmpty()) return;
+        if (txt.isEmpty()) {
+            pillKey = "";
+            updatePill();
+            return;
+        }
         String[] toks = txt.split("\\s+");
         long next = idx + 1 < lines.size() ? lines.get(idx + 1).t : ln.t + 4000;
         long dur = Math.max(800, Math.min(next - ln.t, 6000));
@@ -433,55 +614,46 @@ public class LyricsOverlay {
             acc += t.length() + 2;
         }
         curWords = ws;
+        curToks = toks;
+        lineEndAt = ln.t + dur;
         int already = 0;
         for (int i = 0; i < ws.size(); i++) if (ws.get(i).start <= pos) already = i + 1;
-        // masuk di tengah baris (misalnya setelah geser lagu): tampilkan kata terbaru saja
+        // masuk di tengah baris (misalnya setelah geser lagu): mulai dari kata terbaru saja
         shown = (pos - ln.t > 1200) ? Math.max(already - 1, 0) : 0;
+        updatePillLine(toks, -1);
     }
 
     // ---- kata ----
 
-    private void showWord(String text, int k) {
-        final TextView tv = new TextView(act);
+    private void showWord(String text) {
         String w = text.toUpperCase(Locale.getDefault());
-        tv.setText(w);
-        if (font != null) tv.setTypeface(font);
-        float sz = 24 + (k % 3) * 4;
-        tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, sz);
-        tv.setTextColor(0xFFE6D9FF);
-        tv.setShadowLayer(0.01f, dp(3), dp(2), 0xAA9B6BFF);
-        tv.setSingleLine(true);
-        tv.setAlpha(0f);
-        tv.setScaleX(0.85f);
-        tv.setScaleY(0.85f);
-
         DisplayMetrics dm = act.getResources().getDisplayMetrics();
         int W = root.getWidth() > 0 ? root.getWidth() : dm.widthPixels;
         int H = root.getHeight() > 0 ? root.getHeight() : dm.heightPixels;
+
+        // gabungkan ke potongan yang sama kalau masih muat (seperti "NOW I WON'T")
+        if (curChunk != null && curChunk.alive() && curChunkWords < CHUNK_MAX_WORDS
+                && curChunk.text.length() + 1 + w.length() <= CHUNK_MAX_CHARS) {
+            wv.setChunkText(curChunk, curChunk.text + " " + w, W);
+            curChunkWords++;
+            return;
+        }
         float[] slot = SLOTS[slotIdx++ % SLOTS.length];
-        float estW = w.length() * TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, sz, dm) * 0.62f;
-        int x = (int) (slot[0] * W - estW / 2 + (rnd.nextFloat() - 0.5f) * 0.06f * W);
-        int y = (int) (slot[1] * H + (rnd.nextFloat() - 0.5f) * 0.06f * H);
-        x = Math.max(0, Math.min(x, Math.max(0, (int) (W - estW))));
-        y = Math.max(0, Math.min(y, Math.max(0, H - dp(48))));
-        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(-2, -2);
-        lp.leftMargin = x;
-        lp.topMargin = y;
-        wordLayer.addView(tv, lp);
-        live.add(tv);
-        while (live.size() > MAX_LIVE) fadeOut(live.get(0), 80);
-
-        tv.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(110).start();
-        h.postDelayed(() -> fadeOut(tv, 300), HOLD_MS);
+        float jx = (rnd.nextFloat() - 0.5f) * 0.03f * W;
+        float jy = (rnd.nextFloat() - 0.5f) * 0.03f * H;
+        float sizePx = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, slot[3], dm);
+        float curve = (rnd.nextBoolean() ? 1f : -1f) * 0.22f;
+        curChunk = wv.add(w, slot[0] * W + jx, slot[1] * H + jy, slot[2], sizePx, curve, W);
+        curChunkWords = 1;
     }
 
-    private void fadeOut(final TextView tv, long ms) {
-        if (!live.remove(tv)) return;
-        tv.animate().alpha(0f).setDuration(ms).withEndAction(() -> wordLayer.removeView(tv)).start();
-    }
-
-    private void fadeAllWords() {
-        for (TextView tv : new ArrayList<>(live)) fadeOut(tv, 200);
+    private void clearWords() {
+        wv.fadeAll();
+        curChunk = null;
+        curChunkWords = 0;
+        curWords = null;
+        curToks = null;
+        shown = 0;
     }
 
     // ---- siklus hidup ----
@@ -490,6 +662,7 @@ public class LyricsOverlay {
         ticking = false;
         started = false;
         h.removeCallbacksAndMessages(null);
+        wv.stop();
         if (ctrl != null && ctrlCb != null) {
             try {
                 ctrl.unregisterCallback(ctrlCb);
@@ -503,6 +676,180 @@ public class LyricsOverlay {
         client.shutdown();
         ViewGroup p = (ViewGroup) root.getParent();
         if (p != null) p.removeView(root);
+    }
+
+    // ---- kotak ungu penyorot kata di pill ----
+
+    private static final class ChipSpan extends ReplacementSpan {
+        private final int bg, radius, pad;
+        private final RectF r = new RectF();
+
+        ChipSpan(int bg, int radius, int pad) {
+            this.bg = bg;
+            this.radius = radius;
+            this.pad = pad;
+        }
+
+        @Override
+        public int getSize(Paint paint, CharSequence text, int start, int end, Paint.FontMetricsInt fm) {
+            return (int) (paint.measureText(text, start, end) + pad * 2);
+        }
+
+        @Override
+        public void draw(Canvas canvas, CharSequence text, int start, int end, float x,
+                         int top, int y, int bottom, Paint paint) {
+            float w = paint.measureText(text, start, end);
+            int old = paint.getColor();
+            r.set(x, top, x + w + pad * 2, bottom);
+            paint.setColor(bg);
+            canvas.drawRoundRect(r, radius, radius, paint);
+            paint.setColor(0xFFFFFFFF);
+            canvas.drawText(text, start, end, x + pad, y, paint);
+            paint.setColor(old);
+        }
+    }
+
+    // ---- satu View untuk semua kata: melengkung, memudar, tanpa view/animator per kata ----
+
+    private static final class WordsView extends View {
+
+        static final class Chunk {
+            String text;
+            float x, y, rot, sizePx, curve, w;
+            long born, dieAt;
+            final Path path = new Path();
+
+            boolean alive() {
+                return dieAt == 0;
+            }
+
+        }
+
+        private final List<Chunk> chunks = new ArrayList<>();
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Matrix mx = new Matrix();
+        private boolean running;
+
+        private final Runnable frame = new Runnable() {
+            @Override
+            public void run() {
+                if (chunks.isEmpty()) {
+                    running = false;
+                    return;
+                }
+                invalidate();
+                postDelayed(this, FRAME_MS);
+            }
+        };
+
+        WordsView(Context c, Typeface tf) {
+            super(c);
+            if (tf != null) paint.setTypeface(tf);
+            paint.setColor(0xFFFFFFFF);
+            float d = c.getResources().getDisplayMetrics().density;
+            paint.setShadowLayer(8f * d, 0f, 0f, 0xAAFFFFFF);
+            setWillNotDraw(false);
+        }
+
+        Chunk add(String text, float x, float y, float rot, float sizePx, float curve, int viewW) {
+            // batasi jumlah potongan: yang paling lama dipudarkan
+            int live = 0;
+            for (Chunk c : chunks) if (c.alive()) live++;
+            if (live >= MAX_CHUNKS) {
+                for (Chunk c : chunks) {
+                    if (c.alive()) {
+                        c.dieAt = SystemClock.uptimeMillis();
+                        break;
+                    }
+                }
+            }
+            Chunk ch = new Chunk();
+            ch.text = text;
+            ch.x = x;
+            ch.y = y;
+            ch.rot = rot;
+            ch.sizePx = sizePx;
+            ch.curve = curve;
+            ch.born = SystemClock.uptimeMillis();
+            layoutChunk(ch, viewW);
+            chunks.add(ch);
+            kick();
+            return ch;
+        }
+
+        void setChunkText(Chunk c, String t, int viewW) {
+            c.text = t;
+            layoutChunk(c, viewW);
+        }
+
+        private void layoutChunk(Chunk c, int viewW) {
+            paint.setTextSize(c.sizePx);
+            c.w = paint.measureText(c.text);
+            // jaga agar tidak keluar layar di kanan
+            float maxX = viewW - c.w - c.sizePx * 0.4f;
+            if (c.x > maxX) c.x = Math.max(0, maxX);
+            c.path.reset();
+            c.path.moveTo(0, 0);
+            c.path.quadTo(c.w / 2f, -c.w * c.curve * 0.35f, c.w, 0);
+            mx.reset();
+            mx.postRotate(c.rot, 0, 0);
+            mx.postTranslate(c.x, c.y);
+            c.path.transform(mx);
+            kick();
+        }
+
+        void fadeAll() {
+            long now = SystemClock.uptimeMillis();
+            for (Chunk c : chunks) if (c.alive()) c.dieAt = now;
+            kick();
+        }
+
+        void stop() {
+            running = false;
+            removeCallbacks(frame);
+            chunks.clear();
+        }
+
+        private void kick() {
+            if (!running) {
+                running = true;
+                postOnAnimation(frame);
+            }
+        }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            if (chunks.isEmpty()) return;
+            long now = SystemClock.uptimeMillis();
+            Iterator<Chunk> it = chunks.iterator();
+            while (it.hasNext()) {
+                Chunk c = it.next();
+                float a = Math.min(1f, (now - c.born) / (float) FADE_IN_MS);
+                float s = 0.88f + 0.12f * a;
+                if (c.dieAt != 0) {
+                    float o = 1f - (now - c.dieAt) / (float) FADE_OUT_MS;
+                    if (o <= 0f) {
+                        it.remove();
+                        continue;
+                    }
+                    a *= o;
+                }
+                paint.setTextSize(c.sizePx);
+                paint.setAlpha((int) (255 * a));
+                canvas.save();
+                canvas.scale(s, s, c.x + c.w / 2f, c.y);
+                canvas.drawTextOnPath(c.text, c.path, 0f, 0f, paint);
+                canvas.restore();
+            }
+            paint.setAlpha(255);
+        }
+
+        @Override
+        protected void onDetachedFromWindow() {
+            super.onDetachedFromWindow();
+            running = false;
+            removeCallbacks(frame);
+        }
     }
 
     // ---- equalizer kecil, digerakkan oleh ticker (tanpa animator terpisah) ----
