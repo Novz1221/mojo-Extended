@@ -138,13 +138,13 @@ public final class SocialClient {
         return out;
     }
 
-    private static String newSalt() {
+    static String newSalt() {
         byte[] b = new byte[16];
         new SecureRandom().nextBytes(b);
         return hex(b);
     }
 
-    private static String hashPassword(String password, String saltHex) throws Exception {
+    static String hashPassword(String password, String saltHex) throws Exception {
         javax.crypto.spec.PBEKeySpec spec = new javax.crypto.spec.PBEKeySpec(password.toCharArray(), unhex(saltHex), 20000, 256);
         byte[] d = javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA1").generateSecret(spec).getEncoded();
         return hex(d);
@@ -276,7 +276,7 @@ public final class SocialClient {
         });
     }
 
-    private static boolean constantEquals(String a, String b) {
+    static boolean constantEquals(String a, String b) {
         if (a.length() != b.length()) return false;
         int r = 0;
         for (int i = 0; i < a.length(); i++) r |= a.charAt(i) ^ b.charAt(i);

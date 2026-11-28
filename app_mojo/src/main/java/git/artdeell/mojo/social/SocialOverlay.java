@@ -119,7 +119,7 @@ public class SocialOverlay {
     private TextView callCount;
     private ImageView muteBtn;
     private LinearLayout roomList;
-    private String roomFilter = "", newRoomName = "", pendingFriend = "", pendingMic = null;
+    private String roomFilter = "", newRoomName = "", newRoomPass = "", pendingFriend = "", pendingMic = null;
 
     // chat
     private String chatRoom = "umum", lastKey = "";
@@ -752,9 +752,10 @@ public class SocialOverlay {
         sl.topMargin = dp(10);
         c.addView(sv, sl);
 
-        LinearLayout create = row();
+        LinearLayout create = column();
         create.setBackground(bg(0xFF2A2C33, 14));
         create.setPadding(dp(8), dp(8), dp(8), dp(8));
+        LinearLayout top = row();
         final TextView field = label(newRoomName.isEmpty() ? "NAMA ROOM" : newRoomName, 18, 0xFFE0E0E0);
         field.setBackground(bg(0xFF14151A, 10));
         field.setPadding(dp(14), dp(12), dp(14), dp(12));
@@ -765,11 +766,25 @@ public class SocialOverlay {
             field.setText(newRoomName.isEmpty() ? "NAMA ROOM" : newRoomName);
             return true;
         }));
-        create.addView(field, new LinearLayout.LayoutParams(0, -2, 1f));
+        top.addView(field, new LinearLayout.LayoutParams(0, -2, 1f));
         TextView go = pill("CREATE", C_BLUE, C_BLUE_TEXT, 16, v -> createRoom());
         LinearLayout.LayoutParams gp = new LinearLayout.LayoutParams(-2, -2);
         gp.setMarginStart(dp(8));
-        create.addView(go, gp);
+        top.addView(go, gp);
+        create.addView(top);
+        final TextView pass = label(newRoomPass.isEmpty() ? "PASSWORD (OPSIONAL)" : "PASSWORD: " + newRoomPass.replaceAll(".", "*"), 14, 0xFFB0B0B0);
+        pass.setBackground(bg(0xFF14151A, 10));
+        pass.setPadding(dp(14), dp(10), dp(14), dp(10));
+        pass.setSingleLine(true);
+        pass.setClickable(true);
+        pass.setOnClickListener(v -> M3Dialog.inputPassword(act, "Password room", "Kosongkan kalau tanpa password", "OK", text -> {
+            newRoomPass = text;
+            pass.setText(newRoomPass.isEmpty() ? "PASSWORD (OPSIONAL)" : "PASSWORD: " + newRoomPass.replaceAll(".", "*"));
+            return true;
+        }));
+        LinearLayout.LayoutParams pp = new LinearLayout.LayoutParams(-1, -2);
+        pp.topMargin = dp(6);
+        create.addView(pass, pp);
         LinearLayout.LayoutParams cl = new LinearLayout.LayoutParams(-1, -2);
         cl.topMargin = dp(10);
         c.addView(create, cl);
@@ -797,7 +812,10 @@ public class SocialOverlay {
             for (String id : ids) {
                 if (id.startsWith("dm_")) continue;
                 if (!roomFilter.isEmpty() && !id.contains(roomFilter)) continue;
-                int n = membersOf(all.optJSONObject(id)).size();
+                final JSONObject roomObj = all.optJSONObject(id);
+                int n = membersOf(roomObj).size();
+                boolean locked = VoiceRooms.hasLock(roomObj);
+                boolean mine = VoiceRooms.isOwner(roomObj, me());
                 LinearLayout r = row();
                 r.setBackground(bg(C_ROW, 12));
                 r.setPadding(dp(14), dp(8), dp(8), dp(8));
@@ -805,8 +823,19 @@ public class SocialOverlay {
                 TextView name = label(id, 20, 0xFFFFFFFF);
                 name.setSingleLine(true);
                 info.addView(name);
-                info.addView(label(n + "/" + MAX_VOICE, 12, 0xFFB0B0B0));
+                info.addView(label(n + "/" + MAX_VOICE + (locked ? "  TERKUNCI" : "") + (mine ? "  MILIKMU" : ""), 12, 0xFFB0B0B0));
                 r.addView(info, new LinearLayout.LayoutParams(0, -2, 1f));
+                if (mine) {
+                    r.addView(iconBtn(R.drawable.ic_social_delete, 0xFFE57373, 0, 40, v ->
+                            M3Dialog.confirm(act, "Hapus room?", "Room " + id + " akan dihapus. Hanya kamu sebagai pembuat yang bisa melakukannya.", "Hapus", () ->
+                                    VoiceRooms.delete(client, id, (ok, e) -> {
+                                        if (e != null) toast(e);
+                                        else {
+                                            toast("Room dihapus");
+                                            loadRooms();
+                                        }
+                                    }))), new LinearLayout.LayoutParams(dp(40), dp(40)));
+                }
                 r.addView(pill("JOIN", C_BLUE, C_BLUE_TEXT, 18, v -> tryJoin(id)));
                 LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
                 lp.bottomMargin = dp(6);
@@ -817,17 +846,18 @@ public class SocialOverlay {
     }
 
     private void createRoom() {
-        String n = newRoomName;
+        final String n = newRoomName;
         if (n.length() < 2 || n.length() > 20 || n.startsWith("dm_")) {
             toast("Nama room 2-20 karakter, tidak diawali dm_");
             return;
         }
-        client.put("voice/" + n + "/c", client.getUser(), (j, e) -> {
+        VoiceRooms.create(client, n, newRoomPass, (ok, e) -> {
             if (e != null) {
                 toast(e);
                 return;
             }
             newRoomName = "";
+            newRoomPass = "";
             tryJoin(n);
         });
     }
@@ -895,18 +925,35 @@ public class SocialOverlay {
                 toast(err);
                 return;
             }
-            Map<String, Boolean> now = membersOf(json instanceof JSONObject ? (JSONObject) json : null);
+            final JSONObject room = json instanceof JSONObject ? (JSONObject) json : null;
+            Map<String, Boolean> now = membersOf(room);
             if (!now.containsKey(me()) && now.size() >= MAX_VOICE) {
                 toast("Room penuh (maksimal " + MAX_VOICE + " orang)");
                 return;
             }
-            if (ContextCompat.checkSelfPermission(act, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-                joinVoice(id);
-            } else {
-                pendingMic = id;
-                ActivityCompat.requestPermissions(act, new String[]{Manifest.permission.RECORD_AUDIO}, REQ_MIC);
+            boolean locked = !id.startsWith("dm_") && VoiceRooms.hasLock(room)
+                    && !VoiceRooms.isOwner(room, me()) && !now.containsKey(me());
+            if (!locked) {
+                startJoin(id);
+                return;
             }
+            M3Dialog.inputPassword(act, "Room terkunci", "Password room", "Masuk", text -> {
+                VoiceRooms.verify(room, text, (ok, e) -> {
+                    if (e != null) toast(e);
+                    else startJoin(id);
+                });
+                return true;
+            });
         });
+    }
+
+    private void startJoin(String id) {
+        if (ContextCompat.checkSelfPermission(act, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            joinVoice(id);
+        } else {
+            pendingMic = id;
+            ActivityCompat.requestPermissions(act, new String[]{Manifest.permission.RECORD_AUDIO}, REQ_MIC);
+        }
     }
 
     private void joinVoice(String id) {

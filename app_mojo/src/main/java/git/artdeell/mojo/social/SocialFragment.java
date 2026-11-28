@@ -632,16 +632,25 @@ public class SocialFragment extends Fragment {
         LinearLayout bar = row();
         EditText name = input("Nama room baru");
         bar.addView(name, new LinearLayout.LayoutParams(0, dp(44), 1f));
+        EditText roomPass = input("Password (opsional)");
+        roomPass.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        LinearLayout.LayoutParams rpp = new LinearLayout.LayoutParams(0, dp(44), 1f);
+        rpp.setMarginStart(dp(8));
+        bar.addView(roomPass, rpp);
         TextView create = button("Buat Room", true, v -> {
             String n = SocialClient.key(name.getText().toString().trim());
-            if (n.length() < 2 || n.length() > 20) {
-                toast("Nama 2-20 karakter");
+            if (n.length() < 2 || n.length() > 20 || n.startsWith("dm_")) {
+                toast("Nama 2-20 karakter, tidak diawali dm_");
                 return;
             }
-            name.setText("");
-            mClient.put("voice/" + n + "/c", mClient.getUser(), (j, e) -> {
+            VoiceRooms.create(mClient, n, roomPass.getText().toString(), (ok, e) -> {
+                if (!isAdded()) return;
                 if (e != null) toast(e);
-                else loadVoice(list);
+                else {
+                    name.setText("");
+                    roomPass.setText("");
+                    loadVoice(list);
+                }
             });
         });
         LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(-2, dp(44));
@@ -676,9 +685,23 @@ public class SocialFragment extends Fragment {
                 card.setBackgroundResource(R.drawable.m3_card);
                 card.setPadding(dp(16), dp(10), dp(12), dp(10));
                 LinearLayout info = column();
-                info.addView(text(id, 16, R.color.m3_text));
+                boolean locked = VoiceRooms.hasLock(room);
+                boolean mine = VoiceRooms.isOwner(room, SocialClient.key(mClient.getUser()));
+                info.addView(text(id + (locked ? "  (terkunci)" : "") + (mine ? "  (milikmu)" : ""), 16, R.color.m3_text));
                 info.addView(text(members.isEmpty() ? "Kosong" : android.text.TextUtils.join(", ", members), 12, R.color.m3_text_dim));
                 card.addView(info, new LinearLayout.LayoutParams(0, -2, 1f));
+                if (mine) {
+                    TextView del = button("Hapus", false, v -> M3Dialog.confirm(requireContext(), "Hapus room?",
+                            "Room " + id + " akan dihapus. Hanya pembuat room yang bisa melakukannya.", "Hapus", () ->
+                                    VoiceRooms.delete(mClient, id, (ok, e) -> {
+                                        if (!isAdded()) return;
+                                        if (e != null) toast(e);
+                                        else loadVoice(list);
+                                    })));
+                    LinearLayout.LayoutParams dl = new LinearLayout.LayoutParams(-2, -2);
+                    dl.setMarginEnd(dp(8));
+                    card.addView(del, dl);
+                }
                 boolean here = id.equals(mVoiceRoom);
                 card.addView(button(here ? "Buka" : "Gabung", true, v -> {
                     if (here) {
@@ -726,20 +749,37 @@ public class SocialFragment extends Fragment {
                 toast(err);
                 return;
             }
-            java.util.Map<String, Boolean> now = membersOf(json instanceof JSONObject ? (JSONObject) json : null);
-            boolean already = now.containsKey(SocialClient.key(mClient.getUser()));
+            final JSONObject room = json instanceof JSONObject ? (JSONObject) json : null;
+            java.util.Map<String, Boolean> now = membersOf(room);
+            String myKey = SocialClient.key(mClient.getUser());
+            boolean already = now.containsKey(myKey);
             if (!already && now.size() >= MAX_VOICE_MEMBERS) {
                 toast("Room penuh (maksimal " + MAX_VOICE_MEMBERS + " orang)");
                 return;
             }
-            if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.RECORD_AUDIO)
-                    == PackageManager.PERMISSION_GRANTED) {
-                joinVoice(id);
-            } else {
-                mPendingJoin = id;
-                mMicLauncher.launch(Manifest.permission.RECORD_AUDIO);
+            if (VoiceRooms.hasLock(room) && !VoiceRooms.isOwner(room, myKey) && !already) {
+                M3Dialog.inputPassword(requireContext(), "Room terkunci", "Password room", "Masuk", text -> {
+                    VoiceRooms.verify(room, text, (ok, e) -> {
+                        if (!isAdded()) return;
+                        if (e != null) toast(e);
+                        else proceedJoinVoice(id);
+                    });
+                    return true;
+                });
+                return;
             }
+            proceedJoinVoice(id);
         });
+    }
+
+    private void proceedJoinVoice(String id) {
+        if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.RECORD_AUDIO)
+                == PackageManager.PERMISSION_GRANTED) {
+            joinVoice(id);
+        } else {
+            mPendingJoin = id;
+            mMicLauncher.launch(Manifest.permission.RECORD_AUDIO);
+        }
     }
 
     /** uid suara stabil dari nama (sama di semua HP), tidak pernah 0 */
