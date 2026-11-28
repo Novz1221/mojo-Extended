@@ -3,10 +3,17 @@
     "users": {
       "$u": {
         ".read": true,
-        ".write": "!data.exists()",
-        ".validate": "newData.hasChildren(['n','s'])",
-        "n": { ".validate": "newData.isString() && newData.val().length >= 3 && newData.val().length <= 16" },
-        "s": { ".validate": "newData.isString() && newData.val().length == 64" }
+        ".write": "!data.exists() || !data.child('a').exists()",
+        ".validate": "newData.hasChildren(['n','s','a'])",
+        "n": {
+          ".validate": "newData.isString() && newData.val().length >= 3 && newData.val().length <= 16"
+        },
+        "s": {
+          ".validate": "newData.isString() && newData.val().length == 64"
+        },
+        "a": {
+          ".validate": "newData.isString() && newData.val().length == 32"
+        }
       }
     },
     "rooms": {
@@ -25,7 +32,33 @@
         }
       }
     },
-    "friends": { "$u": { ".read": true, ".write": true } },
-    "voice": { ".read": true, "$r": { ".write": true } }
+    "friends": {
+      "$u": {
+        ".read": true,
+        ".write": true
+      }
+    },
+    "voice": {
+      ".read": true,
+      "$r": {
+        ".write": true
+      }
+    },
+    "avatars": {
+      "$u": {
+        ".read": true,
+        ".write": true,
+        ".validate": "newData.isString() && newData.val().length < 20000"
+      }
+    },
+    "requests": {
+      "$u": {
+        ".read": true,
+        "$f": {
+          ".write": true,
+          ".validate": "newData.isString() && newData.val().length <= 16"
+        }
+      }
+    }
   }
 }

@@ -44,6 +44,8 @@ public class VoiceService extends Service {
     private static final String ACTION_MUTE = "git.artdeell.mojo.voice.MUTE";
     private static final String ACTION_TOGGLE_MUTE = "git.artdeell.mojo.voice.TOGGLE_MUTE";
     private static final String ACTION_QUERY = "git.artdeell.mojo.voice.QUERY";
+    private static final String ACTION_PEER_VOL = "git.artdeell.mojo.voice.PEER_VOL";
+    private static final String ACTION_MIC_SENS = "git.artdeell.mojo.voice.MIC_SENS";
 
     private static final String CHANNEL = "voice_chat";
     private static final int NOTIF_ID = 7721;
@@ -71,6 +73,15 @@ public class VoiceService extends Service {
 
     public static void setMuted(Context c, boolean muted) {
         send(c, new Intent(c, VoiceService.class).setAction(ACTION_MUTE).putExtra("muted", muted));
+    }
+
+    public static void setPeerVolume(Context c, int uid, int percent) {
+        send(c, new Intent(c, VoiceService.class).setAction(ACTION_PEER_VOL)
+                .putExtra("uid", uid).putExtra("percent", percent));
+    }
+
+    public static void setMicSensitivity(Context c, int percent) {
+        send(c, new Intent(c, VoiceService.class).setAction(ACTION_MIC_SENS).putExtra("percent", percent));
     }
 
     /** Minta service mengirim status terbaru lewat ACTION_STATE */
@@ -158,6 +169,10 @@ public class VoiceService extends Service {
             if (mActive) setMuted(!mMuted);
         } else if (ACTION_QUERY.equals(a)) {
             broadcastState(null);
+        } else if (ACTION_PEER_VOL.equals(a)) {
+            if (mActive && mEngine != null) mEngine.setPeerVolume(intent.getIntExtra("uid", 0), intent.getIntExtra("percent", 90));
+        } else if (ACTION_MIC_SENS.equals(a)) {
+            if (mActive && mEngine != null) mEngine.setMicSensitivity(intent.getIntExtra("percent", 90));
         }
         if (!mActive) stopSelf();
         return START_NOT_STICKY;

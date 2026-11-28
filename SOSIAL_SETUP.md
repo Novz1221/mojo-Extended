@@ -28,3 +28,24 @@ Catatan voice:
 - Pakai headset saat main. Suara game dari speaker bisa terambil mikrofon dan terdengar oleh teman.
 - Keluar dari game tidak mematikan voice. Voice berhenti lewat tombol Keluar, keluar otomatis, atau Force Stop.
 - Belum dicoba build nyata. Kalau ada error compile, kirim lognya.
+
+
+## Menu sosial di dalam game
+
+Di game, buka drawer menu lalu tekan **Sosial** untuk menampilkan bar ikon di kiri atas: Teman, Voice, Chat. Tekan lagi untuk menyembunyikannya.
+- **Teman**: tambah lewat username (ADD mengirim permintaan), REQUEST untuk menerima atau menolak, ikon chat membuka chat pribadi, ikon telepon membuka voice room pribadi berdua.
+- **Voice**: daftar room (SEARCH, JOIN, CREATE) dan layar panggilan dengan tombol tutup, mute, dan SUARA (volume tiap teman dan sensitivitas mic).
+- **Chat**: tab UMUM, room lain, dan chat pribadi. Mengetik lewat dialog.
+- Avatar pojok kiri atas muncul saat kamu ada di voice room. Cincin hijau berarti sedang bicara.
+- Foto profil: Sosial di launcher, tab **Akun**, tombol **Ganti foto profil**. Foto disimpan 96x96 di `avatars/{username}`.
+- Warna avatar dan tile panggilan acak per orang, tetap sama di semua HP.
+
+Aturan database: file `database.rules.json` ditambah `avatars` dan `requests`. Salin isinya ke Firebase Console, Realtime Database, tab Rules, lalu Publish. Tanpa ini foto profil dan permintaan teman ditolak.
+
+## Akun dengan password
+
+Tab Akun di launcher sekarang punya **Daftar** dan **Masuk**. Daftar: isi username, password (minimal 6 karakter), ulangi password, lalu tekan Daftar, dan kamu langsung masuk. Berikutnya cukup Masuk dengan username dan password yang sama.
+- Password di-hash dengan PBKDF2 (salt acak) di HP, jadi password asli tidak pernah dikirim ke Firebase. Yang tersimpan hanya `a` (salt) dan `s` (hash) di `users/{username}`.
+- Akun lama tanpa password: masuk dari HP yang dulu mendaftarkannya, isi password baru, dan password itu otomatis terpasang. Dari HP lain akun lama tidak bisa dipakai.
+- Pengecekan password dilakukan di aplikasi. Realtime Database tanpa Firebase Auth tidak bisa memeriksa password di server, jadi aturan database lain (`friends`, `voice`, `avatars`) tetap terbuka bagi yang membongkar APK.
+- Salin `database.rules.json` terbaru ke Firebase Console lalu Publish, supaya akun baru dengan field `a` diterima.

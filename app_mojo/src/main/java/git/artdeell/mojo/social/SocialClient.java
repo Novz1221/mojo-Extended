@@ -113,40 +113,174 @@ public final class SocialClient {
         }
     }
 
-    /** Claims the name when it is free, or signs in when the stored secret matches. */
-    public void login(String name, Callback cb) {
+    // ---- akun dengan password ----
+    // Disimpan di users/{key}: n = nama, a = salt acak (32 hex), s = PBKDF2(password, salt) (64 hex).
+    // Pengecekan dilakukan di aplikasi, karena Realtime Database tanpa Firebase Auth tidak bisa
+    // memverifikasi password di sisi server. Password asli tidak pernah dikirim atau disimpan.
+
+    public static final int MIN_PASSWORD = 6, MAX_PASSWORD = 64;
+
+    public static String validatePassword(String pw) {
+        if (pw == null || pw.length() < MIN_PASSWORD) return "Password minimal " + MIN_PASSWORD + " karakter";
+        if (pw.length() > MAX_PASSWORD) return "Password maksimal " + MAX_PASSWORD + " karakter";
+        return null;
+    }
+
+    private static String hex(byte[] b) {
+        StringBuilder sb = new StringBuilder();
+        for (byte x : b) sb.append(String.format("%02x", x));
+        return sb.toString();
+    }
+
+    private static byte[] unhex(String h) {
+        byte[] out = new byte[h.length() / 2];
+        for (int i = 0; i < out.length; i++) out[i] = (byte) Integer.parseInt(h.substring(2 * i, 2 * i + 2), 16);
+        return out;
+    }
+
+    private static String newSalt() {
+        byte[] b = new byte[16];
+        new SecureRandom().nextBytes(b);
+        return hex(b);
+    }
+
+    private static String hashPassword(String password, String saltHex) throws Exception {
+        javax.crypto.spec.PBEKeySpec spec = new javax.crypto.spec.PBEKeySpec(password.toCharArray(), unhex(saltHex), 20000, 256);
+        byte[] d = javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA1").generateSecret(spec).getEncoded();
+        return hex(d);
+    }
+
+    /** Daftar akun baru. Gagal kalau username sudah dipakai. Berhasil berarti langsung masuk. */
+    public void register(String name, String password, Callback cb) {
         if (!validName(name)) {
             cb.done(null, "Username 3-16 karakter: huruf, angka, garis bawah");
             return;
         }
-        String path = "users/" + key(name);
+        String pwErr = validatePassword(password);
+        if (pwErr != null) {
+            cb.done(null, pwErr);
+            return;
+        }
+        final String path = "users/" + key(name);
         get(path, (json, err) -> {
             if (err != null) {
                 cb.done(null, err);
                 return;
             }
             if (json instanceof JSONObject) {
-                String stored = ((JSONObject) json).optString("s");
-                if (!stored.equals(secretHash())) {
-                    cb.done(null, "Username sudah dipakai orang lain");
-                    return;
-                }
-                prefs.edit().putString(KEY_USER, name).apply();
-                cb.done(Boolean.TRUE, null);
+                cb.done(null, "Username sudah dipakai. Pilih yang lain, atau tekan Masuk kalau itu akunmu.");
                 return;
             }
-            try {
-                JSONObject o = new JSONObject();
-                o.put("n", name);
-                o.put("s", secretHash());
-                put(path, o, (j, e) -> {
-                    if (e == null) prefs.edit().putString(KEY_USER, name).apply();
-                    cb.done(e == null ? Boolean.TRUE : null, e);
+            MojoApplication.sExecutorService.execute(() -> {
+                String salt = newSalt();
+                String hash;
+                try {
+                    hash = hashPassword(password, salt);
+                } catch (Exception e) {
+                    Tools.runOnUiThread(() -> cb.done(null, "Gagal memproses password: " + e.getMessage()));
+                    return;
+                }
+                final String h = hash;
+                Tools.runOnUiThread(() -> {
+                    try {
+                        JSONObject o = new JSONObject();
+                        o.put("n", name);
+                        o.put("a", salt);
+                        o.put("s", h);
+                        put(path, o, (j, e) -> {
+                            if (e == null) prefs.edit().putString(KEY_USER, name).apply();
+                            cb.done(e == null ? Boolean.TRUE : null, e);
+                        });
+                    } catch (Exception e) {
+                        cb.done(null, String.valueOf(e));
+                    }
                 });
-            } catch (Exception e) {
-                cb.done(null, String.valueOf(e));
-            }
+            });
         });
+    }
+
+    /** Masuk ke akun yang sudah terdaftar. Akun lama (tanpa password) diamankan otomatis dari HP yang mendaftarkannya. */
+    public void login(String name, String password, Callback cb) {
+        if (!validName(name)) {
+            cb.done(null, "Username 3-16 karakter: huruf, angka, garis bawah");
+            return;
+        }
+        if (password == null || password.isEmpty()) {
+            cb.done(null, "Isi password");
+            return;
+        }
+        final String path = "users/" + key(name);
+        get(path, (json, err) -> {
+            if (err != null) {
+                cb.done(null, err);
+                return;
+            }
+            if (!(json instanceof JSONObject)) {
+                cb.done(null, "Akun belum terdaftar. Tekan Daftar.");
+                return;
+            }
+            JSONObject u = (JSONObject) json;
+            final String stored = u.optString("s");
+            final String salt = u.optString("a");
+            final String shown = u.optString("n", name);
+            MojoApplication.sExecutorService.execute(() -> {
+                String error = null;
+                boolean ok = false;
+                String upgradeSalt = null, upgradeHash = null;
+                try {
+                    if (!salt.isEmpty()) {
+                        ok = constantEquals(hashPassword(password, salt), stored);
+                        if (!ok) error = "Password salah";
+                    } else if (stored.equals(secretHash())) {
+                        // akun lama milik HP ini: pasang password sekarang
+                        String pwErr = validatePassword(password);
+                        if (pwErr != null) {
+                            error = "Akun lama ini belum punya password. " + pwErr;
+                        } else {
+                            upgradeSalt = newSalt();
+                            upgradeHash = hashPassword(password, upgradeSalt);
+                            ok = true;
+                        }
+                    } else {
+                        error = "Username sudah dipakai orang lain";
+                    }
+                } catch (Exception e) {
+                    error = "Gagal memeriksa password: " + e.getMessage();
+                }
+                final boolean fok = ok;
+                final String fer = error, us = upgradeSalt, uh = upgradeHash;
+                Tools.runOnUiThread(() -> {
+                    if (!fok) {
+                        cb.done(null, fer);
+                        return;
+                    }
+                    if (us == null) {
+                        prefs.edit().putString(KEY_USER, shown).apply();
+                        cb.done(Boolean.TRUE, null);
+                        return;
+                    }
+                    try {
+                        JSONObject o = new JSONObject();
+                        o.put("n", shown);
+                        o.put("a", us);
+                        o.put("s", uh);
+                        put(path, o, (j, e) -> {
+                            if (e == null) prefs.edit().putString(KEY_USER, shown).apply();
+                            cb.done(e == null ? Boolean.TRUE : null, e);
+                        });
+                    } catch (Exception e) {
+                        cb.done(null, String.valueOf(e));
+                    }
+                });
+            });
+        });
+    }
+
+    private static boolean constantEquals(String a, String b) {
+        if (a.length() != b.length()) return false;
+        int r = 0;
+        for (int i = 0; i < a.length(); i++) r |= a.charAt(i) ^ b.charAt(i);
+        return r == 0;
     }
 
     // ---- REST helpers, all callbacks run on the UI thread ----

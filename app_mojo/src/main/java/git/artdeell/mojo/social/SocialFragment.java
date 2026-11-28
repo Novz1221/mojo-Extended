@@ -74,7 +74,8 @@ public class SocialFragment extends Fragment {
     private ActivityResultLauncher<String> mMicLauncher;
     private String mPendingJoin;
     private java.util.Set<Integer> mSpeaking = new java.util.HashSet<>();
-    private final java.util.Map<String, TextView> mAvatars = new java.util.LinkedHashMap<>();
+    private final java.util.Map<String, AvatarView> mAvatars = new java.util.LinkedHashMap<>();
+    private ActivityResultLauncher<String> mPhotoLauncher;
 
     /** Tiny wrapper so the body container can be swapped */
     private static class FrameLayoutHolder {
@@ -133,6 +134,9 @@ public class SocialFragment extends Fragment {
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        mPhotoLauncher = registerForActivityResult(new ActivityResultContracts.GetContent(), uri -> {
+            if (uri != null) uploadPhoto(uri);
+        });
         mMicLauncher = registerForActivityResult(new ActivityResultContracts.RequestPermission(), granted -> {
             String id = mPendingJoin;
             mPendingJoin = null;
@@ -325,9 +329,10 @@ public class SocialFragment extends Fragment {
             String name = mClient.getUser();
             LinearLayout r = row();
             r.setPadding(0, dp(14), 0, dp(14));
-            TextView avatar = text(name.substring(0, 1).toUpperCase(Locale.ROOT), 34, R.color.m3_text);
-            avatar.setGravity(Gravity.CENTER);
-            avatar.setBackgroundResource(R.drawable.m3_icon_bg);
+            final String myKey = SocialClient.key(name);
+            final AvatarView avatar = new AvatarView(requireContext());
+            avatar.setPerson(myKey, name);
+            Avatars.fetch(mClient, myKey, () -> avatar.setPhoto(Avatars.photo(myKey)));
             r.addView(avatar, new LinearLayout.LayoutParams(dp(72), dp(72)));
             LinearLayout info = column();
             info.setPadding(dp(16), 0, 0, 0);
@@ -335,38 +340,76 @@ public class SocialFragment extends Fragment {
             info.addView(text("Masuk sebagai " + name, 13, R.color.m3_text_dim));
             r.addView(info);
             c.addView(r);
+            TextView photo = button("Ganti foto profil", true, v -> mPhotoLauncher.launch("image/*"));
+            c.addView(photo, new LinearLayout.LayoutParams(-1, dp(48)));
             TextView out = button("Keluar dari Akun", false, v -> {
                 mClient.logout();
                 select(TAB_ACCOUNT);
             });
-            c.addView(out, new LinearLayout.LayoutParams(-1, dp(48)));
+            LinearLayout.LayoutParams outLp = new LinearLayout.LayoutParams(-1, dp(48));
+            outLp.topMargin = dp(10);
+            c.addView(out, outLp);
             TextView db = button("Ganti database", false, v -> mBody.show(buildSetup()));
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(48));
             lp.topMargin = dp(10);
             c.addView(db, lp);
             return c;
         }
-        TextView hint = text("Pilih username untuk chat, teman, dan voice room.", 13, R.color.m3_text_dim);
+        TextView hint = text("Daftar akun baru, atau masuk kalau sudah punya, untuk chat, teman, dan voice room.", 13, R.color.m3_text_dim);
         hint.setPadding(0, dp(6), 0, dp(10));
         c.addView(hint);
-        LinearLayout r = row();
-        EditText name = input("Username (3-16, huruf/angka/_)");
+        final EditText name = input("Username (3-16, huruf/angka/_)");
         Account acc = null;
         try { acc = Accounts.getCurrent(); } catch (Exception ignored) { }
         if (acc != null && acc.username != null) name.setText(acc.username.replaceAll("[^A-Za-z0-9_]", "_"));
-        r.addView(name, new LinearLayout.LayoutParams(0, dp(48), 1f));
+        c.addView(name, new LinearLayout.LayoutParams(-1, dp(48)));
+        final EditText pass = input("Password (minimal " + SocialClient.MIN_PASSWORD + " karakter)");
+        pass.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        LinearLayout.LayoutParams pl = new LinearLayout.LayoutParams(-1, dp(48));
+        pl.topMargin = dp(8);
+        c.addView(pass, pl);
+        final EditText pass2 = input("Ulangi password (hanya untuk Daftar)");
+        pass2.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        c.addView(pass2, pl);
+
+        LinearLayout r = row();
+        TextView reg = button("Daftar", false, v -> {
+            String pw = pass.getText().toString();
+            if (!pw.equals(pass2.getText().toString())) {
+                toast("Password dan ulangi password tidak sama");
+                return;
+            }
+            v.setEnabled(false);
+            mClient.register(name.getText().toString().trim(), pw, (ok, err) -> {
+                v.setEnabled(true);
+                if (!isAdded()) return;
+                if (err != null) toast(err);
+                else {
+                    toast("Akun dibuat, kamu sudah masuk");
+                    select(TAB_CHAT);
+                }
+            });
+        });
         TextView go = button("Masuk", true, v -> {
             v.setEnabled(false);
-            mClient.login(name.getText().toString().trim(), (ok, err) -> {
+            mClient.login(name.getText().toString().trim(), pass.getText().toString(), (ok, err) -> {
                 v.setEnabled(true);
+                if (!isAdded()) return;
                 if (err != null) toast(err);
                 else select(TAB_CHAT);
             });
         });
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, dp(48));
-        lp.setMarginStart(dp(10));
-        r.addView(go, lp);
-        c.addView(r);
+        LinearLayout.LayoutParams rl = new LinearLayout.LayoutParams(0, dp(48), 1f);
+        r.addView(reg, rl);
+        LinearLayout.LayoutParams gl = new LinearLayout.LayoutParams(0, dp(48), 1f);
+        gl.setMarginStart(dp(10));
+        r.addView(go, gl);
+        LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(-1, -2);
+        rowLp.topMargin = dp(12);
+        c.addView(r, rowLp);
+        TextView note = text("Password tidak bisa dipulihkan kalau lupa, jadi catat di tempat aman.", 12, R.color.m3_text_dim);
+        note.setPadding(0, dp(10), 0, 0);
+        c.addView(note);
         return c;
     }
 
@@ -694,7 +737,40 @@ public class SocialFragment extends Fragment {
         if (refresh && isAdded()) select(TAB_VOICE);
     }
 
-    private static final int[] AVATAR_COLORS = {0xFFB9A7C9, 0xFFA7C4C9, 0xFFC9BBA7, 0xFFA7C9AE, 0xFFC9A7B3, 0xFFA7B1C9};
+    /** Kecilkan foto jadi 96x96, lalu simpan di avatars/{key} supaya terlihat oleh temanmu */
+    private void uploadPhoto(android.net.Uri uri) {
+        if (!mClient.isLoggedIn()) return;
+        final Context app = requireContext().getApplicationContext();
+        final String key = SocialClient.key(mClient.getUser());
+        toast("Mengunggah foto...");
+        git.artdeell.mojo.MojoApplication.sExecutorService.execute(() -> {
+            String b64 = null;
+            String error = null;
+            try {
+                b64 = Avatars.encode(app, uri);
+            } catch (Throwable t) {
+                error = t.getMessage() == null ? t.toString() : t.getMessage();
+            }
+            final String data = b64;
+            final String er = error;
+            git.artdeell.mojo.Tools.runOnUiThread(() -> {
+                if (er != null || data == null) {
+                    if (isAdded()) toast("Foto gagal dibaca: " + er);
+                    return;
+                }
+                mClient.put("avatars/" + key, data, (j, e) -> {
+                    if (!isAdded()) return;
+                    if (e != null) {
+                        toast("Gagal unggah foto: " + e + ". Pastikan aturan database sudah diperbarui.");
+                        return;
+                    }
+                    Avatars.put(key, Avatars.decode(data));
+                    toast("Foto profil diperbarui");
+                    select(TAB_ACCOUNT);
+                });
+            });
+        });
+    }
 
     private View buildCall() {
         LinearLayout card = column();
@@ -795,10 +871,12 @@ public class SocialFragment extends Fragment {
             for (java.util.Map.Entry<String, Boolean> m : members.entrySet()) {
                 LinearLayout t = column();
                 t.setGravity(Gravity.CENTER_HORIZONTAL);
-                TextView av = text(m.getKey().substring(0, 1).toUpperCase(Locale.ROOT), 22, R.color.m3_bg);
-                av.setGravity(Gravity.CENTER);
-                mAvatars.put(m.getKey(), av);
-                styleAvatar(av, m.getKey(), mSpeaking.contains(uidFor(m.getKey())));
+                final String mk = m.getKey();
+                final AvatarView av = new AvatarView(requireContext());
+                av.setPerson(mk, mk);
+                av.setSpeaking(mSpeaking.contains(uidFor(mk)));
+                Avatars.fetch(mClient, mk, () -> av.setPhoto(Avatars.photo(mk)));
+                mAvatars.put(mk, av);
                 t.addView(av, new LinearLayout.LayoutParams(dp(56), dp(56)));
                 TextView n = text(m.getKey(), 12, R.color.m3_text);
                 n.setSingleLine(true);
@@ -812,19 +890,10 @@ public class SocialFragment extends Fragment {
         });
     }
 
-    /** Avatar dengan cincin hijau kalau orangnya sedang bicara */
-    private void styleAvatar(TextView av, String key, boolean speaking) {
-        android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable();
-        g.setColor(AVATAR_COLORS[Math.abs(key.toLowerCase(Locale.ROOT).hashCode()) % AVATAR_COLORS.length]);
-        g.setCornerRadius(dp(28));
-        if (speaking) g.setStroke(dp(3), 0xFF4CD964);
-        av.setBackground(g);
-    }
-
     private void applySpeaking() {
         if (!isAdded()) return;
-        for (java.util.Map.Entry<String, TextView> e : mAvatars.entrySet()) {
-            styleAvatar(e.getValue(), e.getKey(), mSpeaking.contains(uidFor(e.getKey())));
+        for (java.util.Map.Entry<String, AvatarView> e : mAvatars.entrySet()) {
+            e.getValue().setSpeaking(mSpeaking.contains(uidFor(e.getKey())));
         }
     }
 

@@ -14,7 +14,7 @@ import git.artdeell.mojo.prefs.LauncherPreferences;
 
 /** Material 3 styled in-game side menu: the original actions plus screen-recorder rows. */
 public class GameMenuAdapter extends BaseAdapter {
-    public static final int POS_REC = 5, POS_SOURCE = 6, POS_AUDIO = 7, POS_RES = 8, POS_FPS = 9, POS_SHOW_FPS = 10;
+    public static final int POS_REC = 5, POS_SOURCE = 6, POS_AUDIO = 7, POS_RES = 8, POS_FPS = 9, POS_SHOW_FPS = 10, POS_SOCIAL = 11;
 
     private final Context context;
     private final String[] actions;
@@ -29,7 +29,7 @@ public class GameMenuAdapter extends BaseAdapter {
 
     @Override
     public int getCount() {
-        return actions.length + 6;
+        return actions.length + 7;
     }
 
     @Override
@@ -65,6 +65,8 @@ public class GameMenuAdapter extends BaseAdapter {
                 return recorder.audioLabel();
             case POS_RES:
                 return recorder.resolutionLabel();
+            case POS_SOCIAL:
+                return "Sosial: teman, voice, chat";
             case POS_SHOW_FPS:
                 return "Tampilkan FPS: " + (LauncherPreferences.PREF_SHOW_FPS ? "On" : "Off");
             default:

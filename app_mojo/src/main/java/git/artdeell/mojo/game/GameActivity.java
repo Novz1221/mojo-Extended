@@ -111,6 +111,7 @@ public class GameActivity extends BaseActivity implements ControlButtonMenuListe
     private GameService.LocalBinder mServiceBinder;
 
     private QuickSettingSideDialog mQuickSettingSideDialog;
+    private git.artdeell.mojo.social.SocialOverlay mSocial;
 
     public static int mForcedPanningHeight = 0;
     public static int mImeHeight = 0;
@@ -225,6 +226,11 @@ public class GameActivity extends BaseActivity implements ControlButtonMenuListe
         setContentView(resId);
         bindValues();
         mControlLayout.setMenuListener(this);
+        try {
+            mSocial = new git.artdeell.mojo.social.SocialOverlay(this, (android.view.ViewGroup) findViewById(R.id.content_frame));
+        } catch (Throwable t) {
+            mSocial = null;
+        }
 
         mDrawerPullButton.setOnClickListener(v -> onClickedMenu());
         drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_LOCKED_CLOSED);
@@ -269,6 +275,9 @@ public class GameActivity extends BaseActivity implements ControlButtonMenuListe
                      case GameMenuAdapter.POS_RES: mRecorder.cycleResolution(); return;
                      case GameMenuAdapter.POS_FPS: mRecorder.cycleFps(); return;
                      case GameMenuAdapter.POS_SHOW_FPS: toggleShowFps(); return;
+                     case GameMenuAdapter.POS_SOCIAL:
+                         if (mSocial != null) mSocial.toggleToolbar();
+                         break;
                 }
                 drawerLayout.closeDrawers();
             };
@@ -386,6 +395,7 @@ public class GameActivity extends BaseActivity implements ControlButtonMenuListe
 
     @Override
     protected void onDestroy() {
+        if (mSocial != null) mSocial.destroy();
         ScreenRecorder.stopNow();
         super.onDestroy();
         ContextExecutor.clearActivity();
@@ -420,6 +430,7 @@ public class GameActivity extends BaseActivity implements ControlButtonMenuListe
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         ScreenRecorder.onPermission(requestCode, grantResults);
+        if (mSocial != null) mSocial.onPermissionResult(requestCode, grantResults);
     }
 
     @Override

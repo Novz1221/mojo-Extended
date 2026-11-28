@@ -66,7 +66,10 @@ public class WebRtcVoiceEngine implements VoiceEngine {
     private Listener mListener;
     private int mUid;
     private volatile boolean mLeft, mMuted;
-    private volatile long mLastLoud;
+    private volatile long mLastLoud, mLastGate;
+    private volatile boolean mGateOpen = true;
+    private volatile int mMicPct = 90;
+    private final Map<Integer, Integer> mVolumes = new HashMap<>();
 
     private HandlerThread mThread;
     private Handler mH;
@@ -117,9 +120,38 @@ public class WebRtcVoiceEngine implements VoiceEngine {
     public void setMuted(boolean muted) {
         mMuted = muted;
         Handler h = mH;
+        if (h != null) h.post(this::applyTrackEnabled);
+    }
+
+    private void applyTrackEnabled() {
+        if (mTrack != null) mTrack.setEnabled(!mMuted && mGateOpen);
+    }
+
+    @Override
+    public void setPeerVolume(int uid, int percent) {
+        final int pct = Math.max(0, Math.min(100, percent));
+        Handler h = mH;
         if (h != null) h.post(() -> {
-            if (mTrack != null) mTrack.setEnabled(!mMuted);
+            mVolumes.put(uid, pct);
+            Peer p = mPeers.get(uid);
+            if (p != null) applyVolume(p);
         });
+    }
+
+    @Override
+    public void setMicSensitivity(int percent) {
+        mMicPct = Math.max(0, Math.min(100, percent));
+    }
+
+    /** Volume 90% dianggap normal (1.0); WebRTC menerima 0..10 */
+    private void applyVolume(Peer p) {
+        Integer pct = mVolumes.get(p.uid);
+        if (pct == null || p.pc == null) return;
+        try {
+            for (RtpReceiver r : p.pc.getReceivers()) {
+                if (r.track() instanceof AudioTrack) ((AudioTrack) r.track()).setVolume(pct / 90.0);
+            }
+        } catch (Throwable ignored) { }
     }
 
     @Override
@@ -156,7 +188,7 @@ public class WebRtcVoiceEngine implements VoiceEngine {
             mFactory = PeerConnectionFactory.builder().setAudioDeviceModule(mAdm).createPeerConnectionFactory();
             mSource = mFactory.createAudioSource(new MediaConstraints());
             mTrack = mFactory.createAudioTrack("mojo_mic", mSource);
-            mTrack.setEnabled(!mMuted);
+            applyTrackEnabled();
             mIce = new ArrayList<>();
             for (String s : STUN) mIce.add(PeerConnection.IceServer.builder(s).createIceServer());
         } catch (Throwable t) {
@@ -404,6 +436,7 @@ public class WebRtcVoiceEngine implements VoiceEngine {
                     if (ok != p.connected) {
                         p.connected = ok;
                         p.lastChange = SystemClockMs();
+                        if (ok) applyVolume(p);
                     }
                     if (s == PeerConnection.IceConnectionState.FAILED
                             || s == PeerConnection.IceConnectionState.CLOSED) {
@@ -468,14 +501,25 @@ public class WebRtcVoiceEngine implements VoiceEngine {
 
     private void onSamples(JavaAudioDeviceModule.AudioSamples samples) {
         byte[] d = samples.getData();
-        if (d == null || d.length < 2 || mMuted) return;
+        if (d == null || d.length < 2) return;
         double sum = 0;
         int n = d.length / 2;
         for (int i = 0; i < n; i++) {
             short v = (short) ((d[2 * i] & 0xff) | (d[2 * i + 1] << 8));
             sum += (double) v * v;
         }
-        if (Math.sqrt(sum / n) > LOCAL_RMS) mLastLoud = SystemClockMs();
+        double rms = Math.sqrt(sum / n);
+        long now = SystemClockMs();
+        if (!mMuted && rms > LOCAL_RMS) mLastLoud = now;
+        // Gerbang sensitivitas: suara di bawah ambang dipotong, dengan jeda tahan supaya awal kata tidak hilang
+        double gate = (100 - mMicPct) * 12.0;
+        if (rms >= gate) mLastGate = now;
+        boolean open = gate <= 0 || now - mLastGate < 500;
+        if (open != mGateOpen) {
+            mGateOpen = open;
+            Handler h = mH;
+            if (h != null) h.post(this::applyTrackEnabled);
+        }
     }
 
     private final Runnable mStats = new Runnable() {
