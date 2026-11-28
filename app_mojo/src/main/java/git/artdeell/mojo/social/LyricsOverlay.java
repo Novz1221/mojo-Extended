@@ -123,7 +123,6 @@ public class LyricsOverlay {
     private ImageView icon;
     private TextView pillText;
     private Equalizer eq;
-    private TextView toggleBtn;
     private LyricLineView lineView;
     private int pillMaxW;
     private String pillKey = "";
@@ -233,42 +232,12 @@ public class LyricsOverlay {
         ep.setMarginStart(dp(8));
         pill.addView(eq, ep);
 
-        // tombol on/off lirik
-        toggleBtn = new TextView(act);
-        toggleBtn.setText("LIRIK");
-        toggleBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9);
-        toggleBtn.setGravity(Gravity.CENTER);
-        toggleBtn.setPadding(dp(7), dp(3), dp(7), dp(3));
-        if (font != null) toggleBtn.setTypeface(font);
-        toggleBtn.setClickable(true);
-        toggleBtn.setOnClickListener(v -> toggleWords());
-        LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(-2, -2);
-        bp.setMarginStart(dp(8));
-        pill.addView(toggleBtn, bp);
-
         applyTint();
-    }
-
-    private void toggleWords() {
-        wordsOn = !wordsOn;
-        prefs.edit().putBoolean(WORDS_KEY, wordsOn).apply();
-        if (!wordsOn) clearWords();
-        curLine = -2;
-        pillKey = "";
-        applyTint();
-        updatePill();
-        Toast.makeText(act, wordsOn ? "Lirik: nyala" : "Lirik: mati", Toast.LENGTH_SHORT).show();
     }
 
     private void applyTint() {
-        pillText.setAlpha(wordsOn ? 1f : 0.55f);
-        eq.setColor(wordsOn ? 0xFFB58CFF : 0xFF777777);
-        GradientDrawable b = new GradientDrawable();
-        b.setCornerRadius(dp(10));
-        b.setColor(wordsOn ? HILITE_BG : 0xFF2A2A34);
-        toggleBtn.setBackground(b);
-        toggleBtn.setTextColor(wordsOn ? 0xFFFFFFFF : 0xFF8A8A98);
-        toggleBtn.setText(wordsOn ? "LIRIK ON" : "LIRIK OFF");
+        pillText.setAlpha(1f);
+        eq.setColor(0xFFB58CFF);
     }
 
     /** Pill mode judul + artis. */
@@ -326,7 +295,7 @@ public class LyricsOverlay {
         if (key.equals(pillKey)) return;
         boolean wasLyric = pillKey.startsWith("L|");
         pillKey = key;
-        if (!wasLyric) animateModeChange();
+        animateModeChange(); // lebar pill ikut berubah tiap baris
         pillText.setVisibility(View.GONE);
         lineView.setVisibility(View.VISIBLE);
         pill.setVisibility(View.VISIBLE);
@@ -750,8 +719,10 @@ public class LyricsOverlay {
         private final Paint chip = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint.FontMetrics fm = new Paint.FontMetrics();
         private final RectF rect = new RectF();
-        private final float pad, slide, radius, vw;
-        private final int viewW;
+        private final float pad, slide, radius, minW;
+        private final int maxW;
+        private float vw;
+        private int viewW;
 
         private Ln cur = new Ln(), prev;
         private Clock clock;
@@ -764,7 +735,9 @@ public class LyricsOverlay {
             super(c);
             DisplayMetrics dm = c.getResources().getDisplayMetrics();
             float d = dm.density;
+            maxW = widthPx;
             viewW = widthPx;
+            minW = 90f * d;
             pad = 4f * d;
             slide = 6f * d;
             radius = 5f * d;
@@ -789,6 +762,9 @@ public class LyricsOverlay {
             }
             n.text = sb.toString();
             n.textW = tp.measureText(n.text);
+            // lebar pill menyesuaikan panjang lirik (maksimal maxW)
+            viewW = (int) Math.max(minW, Math.min(maxW, Math.ceil(n.textW + pad * 4f)));
+            vw = viewW - 2f * pad;
             n.off = n.textW <= vw ? (vw - n.textW) / 2f : 0f;
 
             prev = cur.text.isEmpty() ? null : cur;
@@ -801,6 +777,11 @@ public class LyricsOverlay {
             lineA = 0f;
             fadeStart = SystemClock.uptimeMillis();
             tracking = true;
+            ViewGroup.LayoutParams lp = getLayoutParams();
+            if (lp != null && lp.width != viewW) {
+                lp.width = viewW;
+                setLayoutParams(lp);
+            }
             kick();
         }
 

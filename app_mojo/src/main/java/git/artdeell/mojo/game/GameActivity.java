@@ -295,6 +295,7 @@ public class GameActivity extends BaseActivity implements ControlButtonMenuListe
                      case GameMenuAdapter.POS_RES: mRecorder.cycleResolution(); return;
                      case GameMenuAdapter.POS_FPS: mRecorder.cycleFps(); return;
                      case GameMenuAdapter.POS_SHOW_FPS: toggleShowFps(); return;
+                     case GameMenuAdapter.POS_LYRICS: toggleLyrics(); return;
                 }
                 drawerLayout.closeDrawers();
             };
@@ -320,6 +321,26 @@ public class GameActivity extends BaseActivity implements ControlButtonMenuListe
         } catch (Throwable e) {
             Tools.showError(this, e, true);
         }
+    }
+
+    /** Nyalakan / matikan seluruh overlay lirik (pill + lirik) dari menu samping. */
+    private void toggleLyrics() {
+        try {
+            android.content.SharedPreferences sp = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this);
+            boolean on = !sp.getBoolean(git.artdeell.mojo.social.LyricsOverlay.PREF_KEY, true);
+            sp.edit().putBoolean(git.artdeell.mojo.social.LyricsOverlay.PREF_KEY, on).apply();
+            if (on) {
+                if (mLyrics == null) {
+                    mLyrics = new git.artdeell.mojo.social.LyricsOverlay(this, (android.view.ViewGroup) findViewById(android.R.id.content));
+                }
+            } else if (mLyrics != null) {
+                mLyrics.destroy();
+                mLyrics = null;
+            }
+        } catch (Throwable t) {
+            mLyrics = null;
+        }
+        gameActionArrayAdapter.notifyDataSetChanged();
     }
 
     private void toggleShowFps() {
