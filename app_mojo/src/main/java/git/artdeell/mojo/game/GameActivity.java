@@ -227,7 +227,7 @@ public class GameActivity extends BaseActivity implements ControlButtonMenuListe
         bindValues();
         mControlLayout.setMenuListener(this);
         try {
-            mSocial = new git.artdeell.mojo.social.SocialOverlay(this, (android.view.ViewGroup) findViewById(R.id.content_frame));
+            mSocial = new git.artdeell.mojo.social.SocialOverlay(this, (android.view.ViewGroup) findViewById(android.R.id.content));
         } catch (Throwable t) {
             mSocial = null;
         }

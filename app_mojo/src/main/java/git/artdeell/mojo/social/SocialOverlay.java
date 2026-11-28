@@ -12,6 +12,12 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.graphics.Typeface;
+import android.media.Ringtone;
+import android.media.RingtoneManager;
+import android.net.Uri;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
+import android.text.TextUtils;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.os.Handler;
@@ -64,6 +70,9 @@ public class SocialOverlay {
     private static final int MAX_VOICE = 6;
     private static final long POLL_MS = 3000, COOLDOWN_MS = 3000, VOICE_STALE_MS = 90000;
     private static final int REQ_MIC = 7712;
+    public static final String NOTIF_PREFS = "social_notif", NOTIF_KEY = "on";
+    private static final long NOTIF_MS = 6000;
+    private static final String CALL_TEXT = "Memanggil kamu lewat voice";
 
     private static final int C_PANEL = 0xFF1F2128, C_PANEL_EDGE = 0xFF3A3D47, C_ROW = 0xFF474747;
     private static final int C_TOOL = 0xFF1E2028, C_TOOL_BTN = 0xFF2B2E36, C_TOOL_ON = 0xFF3C4A66;
@@ -79,6 +88,20 @@ public class SocialOverlay {
     private final LinearLayout strip;
     private final FrameLayout panel;
     private final ImageView[] toolButtons = new ImageView[3];
+    private final SharedPreferences notifPrefs;
+    private ImageView bellBtn, closeBtn;
+
+    // notifikasi
+    private boolean notifRunning, reqPrimed, bannerCall;
+    private int notifCycle;
+    private final Map<String, String> notifFriends = new TreeMap<>();
+    private final List<String> notifRooms = new ArrayList<>();
+    private final Map<String, String> lastMsg = new HashMap<>();
+    private final Set<String> seenReq = new HashSet<>();
+    private final Set<String> ringing = new HashSet<>();
+    private View banner;
+    private Runnable bannerHide;
+    private Ringtone tone;
 
     private boolean toolbarOn, running, receiverOn, menuOpen, loginHinted;
     private int page = PAGE_NONE;
@@ -140,6 +163,7 @@ public class SocialOverlay {
         } catch (Throwable ignored) { }
         font = f;
         audioPrefs = activity.getSharedPreferences("social_audio", Context.MODE_PRIVATE);
+        notifPrefs = activity.getApplicationContext().getSharedPreferences(NOTIF_PREFS, Context.MODE_PRIVATE);
 
         root = new FrameLayout(activity);
         host.addView(root, new FrameLayout.LayoutParams(-1, -1));
@@ -174,6 +198,27 @@ public class SocialOverlay {
             if (i > 0) lp.topMargin = dp(5);
             toolbar.addView(b, lp);
         }
+        bellBtn = new ImageView(activity);
+        bellBtn.setImageResource(notifOn() ? R.drawable.ic_social_bell : R.drawable.ic_social_bell_off);
+        bellBtn.setColorFilter(0xFFFFFFFF);
+        bellBtn.setPadding(dp(10), dp(10), dp(10), dp(10));
+        bellBtn.setBackground(bg(C_TOOL_BTN, 10));
+        bellBtn.setClickable(true);
+        bellBtn.setOnClickListener(v -> toggleNotif());
+        LinearLayout.LayoutParams bellLp = new LinearLayout.LayoutParams(dp(44), dp(44));
+        bellLp.topMargin = dp(5);
+        toolbar.addView(bellBtn, bellLp);
+        closeBtn = new ImageView(activity);
+        closeBtn.setImageResource(R.drawable.ic_m3_close);
+        closeBtn.setColorFilter(0xFFFFFFFF);
+        closeBtn.setPadding(dp(10), dp(10), dp(10), dp(10));
+        closeBtn.setBackground(bg(0xFFB3261E, 10));
+        closeBtn.setClickable(true);
+        closeBtn.setVisibility(View.GONE);
+        closeBtn.setOnClickListener(v -> closePage());
+        LinearLayout.LayoutParams closeLp = new LinearLayout.LayoutParams(dp(44), dp(44));
+        closeLp.topMargin = dp(5);
+        toolbar.addView(closeBtn, closeLp);
         FrameLayout.LayoutParams tp = new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.START);
         tp.leftMargin = dp(6);
         tp.topMargin = dp(6);
@@ -199,6 +244,7 @@ public class SocialOverlay {
         else app.registerReceiver(receiver, f2);
         receiverOn = true;
         VoiceService.query(activity);
+        ensureNotif();
     }
 
     // ---- API untuk GameActivity ----
@@ -300,6 +346,7 @@ public class SocialOverlay {
 
     public void destroy() {
         h.removeCallbacksAndMessages(null);
+        stopTone();
         if (receiverOn) {
             try {
                 act.getApplicationContext().unregisterReceiver(receiver);
@@ -396,18 +443,23 @@ public class SocialOverlay {
 
     private void togglePage(int p) {
         if (page == p && panel.getVisibility() == View.VISIBLE) {
-            page = PAGE_NONE;
-            closePanel();
-            highlight();
-            syncToolbar();
-            positionStrip();
+            closePage();
             return;
         }
         showPage(p);
     }
 
+    private void closePage() {
+        page = PAGE_NONE;
+        closePanel();
+        highlight();
+        syncToolbar();
+        positionStrip();
+    }
+
     private void showPage(int p) {
         page = p;
+        syncToolbar();
         callTiles = null;
         callCount = null;
         muteBtn = null;
@@ -423,6 +475,7 @@ public class SocialOverlay {
             t.setPadding(0, dp(12), 0, 0);
             c.addView(t);
             panel.addView(c, new FrameLayout.LayoutParams(-1, -1));
+            addPanelClose(c);
             if (wasOpen) fadeIn(c);
             highlight();
             positionStrip();
@@ -437,6 +490,7 @@ public class SocialOverlay {
             default: v = voiceRoom != null ? buildCall() : buildRoomList(); break;
         }
         panel.addView(v, new FrameLayout.LayoutParams(-1, -1));
+        addPanelClose(v);
         if (wasOpen) fadeIn(v);
         highlight();
         positionStrip();
@@ -450,7 +504,25 @@ public class SocialOverlay {
         }
     }
 
+    /** Tombol X di pojok kanan atas panel; baris judul diberi ruang supaya tidak tertimpa. */
+    private void addPanelClose(View content) {
+        if (content instanceof LinearLayout && ((LinearLayout) content).getChildCount() > 0) {
+            View first = ((LinearLayout) content).getChildAt(0);
+            ViewGroup.LayoutParams flp = first.getLayoutParams();
+            if (flp instanceof ViewGroup.MarginLayoutParams) {
+                ((ViewGroup.MarginLayoutParams) flp).setMarginEnd(dp(40));
+                first.setLayoutParams(flp);
+            }
+        }
+        ImageView x = iconBtn(R.drawable.ic_m3_close, 0xFFFFFFFF, C_ROW, 32, v -> closePage());
+        FrameLayout.LayoutParams xl = new FrameLayout.LayoutParams(dp(32), dp(32), Gravity.TOP | Gravity.END);
+        xl.topMargin = -dp(4);
+        xl.setMarginEnd(-dp(6));
+        panel.addView(x, xl);
+    }
+
     private void highlight() {
+        if (closeBtn != null) closeBtn.setVisibility(page != PAGE_NONE ? View.VISIBLE : View.GONE);
         int active = page == PAGE_FRIENDS || page == PAGE_REQUESTS ? 0 : page == PAGE_VOICE || page == PAGE_SETTINGS ? 1 : page == PAGE_CHAT ? 2 : -1;
         for (int i = 0; i < 3; i++) toolButtons[i].setBackground(bg(i == active ? C_TOOL_ON : C_TOOL_BTN, 10));
     }
@@ -805,6 +877,7 @@ public class SocialOverlay {
 
     private void leaveVoice() {
         VoiceService.leave(act);
+        if (voiceRoom != null) ringing.add(voiceRoom);
         voiceRoom = null;
         members.clear();
         speaking = new HashSet<>();
@@ -1257,5 +1330,265 @@ public class SocialOverlay {
                 if (page == PAGE_VOICE) rebuildTiles();
             }
         });
+    }
+
+    // ---- notifikasi (chat, permintaan teman, panggilan) ----
+
+    private boolean notifOn() {
+        return notifPrefs.getBoolean(NOTIF_KEY, true);
+    }
+
+    private void toggleNotif() {
+        boolean on = !notifOn();
+        notifPrefs.edit().putBoolean(NOTIF_KEY, on).apply();
+        bellBtn.setImageResource(on ? R.drawable.ic_social_bell : R.drawable.ic_social_bell_off);
+        toast(on ? "Notifikasi dinyalakan" : "Notifikasi dimatikan");
+        if (on) {
+            lastMsg.clear();
+            seenReq.clear();
+            reqPrimed = false;
+            ringing.clear();
+            ensureNotif();
+        } else {
+            dismissBanner();
+        }
+    }
+
+    private final Runnable notifTick = new Runnable() {
+        @Override
+        public void run() {
+            if (!notifOn() || !client.isLoggedIn()) {
+                notifRunning = false;
+                return;
+            }
+            pollNotifs();
+            h.postDelayed(this, NOTIF_MS);
+        }
+    };
+
+    private void ensureNotif() {
+        if (!notifRunning && notifOn() && client.isLoggedIn()) {
+            notifRunning = true;
+            h.postDelayed(notifTick, 2000);
+        }
+    }
+
+    private void pollNotifs() {
+        final String my = me();
+        if (notifCycle++ % 10 == 0) {
+            client.get("friends/" + my, (j, e) -> {
+                if (!(j instanceof JSONObject)) return;
+                notifFriends.clear();
+                JSONObject o = (JSONObject) j;
+                Iterator<String> it = o.keys();
+                while (it.hasNext()) {
+                    String fk = it.next();
+                    notifFriends.put(fk, o.optString(fk, fk));
+                }
+            });
+            client.get("rooms", (j, e) -> {
+                if (!(j instanceof JSONObject)) return;
+                notifRooms.clear();
+                Iterator<String> it = ((JSONObject) j).keys();
+                while (it.hasNext()) {
+                    String k = it.next();
+                    if (!k.equals("umum")) notifRooms.add(k);
+                }
+            });
+        }
+
+        // permintaan pertemanan
+        client.get("requests/" + my, (j, e) -> {
+            if (e != null || !notifOn()) return;
+            List<String> fresh = new ArrayList<>();
+            Set<String> now = new HashSet<>();
+            if (j instanceof JSONObject) {
+                JSONObject o = (JSONObject) j;
+                Iterator<String> it = o.keys();
+                while (it.hasNext()) {
+                    String k = it.next();
+                    now.add(k);
+                    if (!seenReq.contains(k)) fresh.add(o.optString(k, k));
+                }
+            }
+            seenReq.clear();
+            seenReq.addAll(now);
+            boolean first = !reqPrimed;
+            reqPrimed = true;
+            if (fresh.isEmpty()) return;
+            String body = fresh.size() == 1 && !first ? fresh.get(0) + " ingin berteman denganmu"
+                    : "Ada " + fresh.size() + " permintaan pertemanan";
+            showBanner("Permintaan teman", body, R.drawable.ic_social_people, false,
+                    () -> showPage(PAGE_REQUESTS), null);
+        });
+
+        // pesan baru
+        List<String> rooms = new ArrayList<>();
+        rooms.add("umum");
+        rooms.addAll(notifRooms);
+        for (String fk : notifFriends.keySet()) rooms.add(dmId(my, fk));
+        for (String room : rooms) {
+            client.get("messages/" + room + "?orderBy=" + SocialClient.q("$key") + "&limitToLast=1", (j, e) -> {
+                if (e != null || !notifOn()) return;
+                if (!(j instanceof JSONObject) || ((JSONObject) j).length() == 0) {
+                    if (!lastMsg.containsKey(room)) lastMsg.put(room, "");
+                    return;
+                }
+                JSONObject o = (JSONObject) j;
+                String newest = null;
+                Iterator<String> it = o.keys();
+                while (it.hasNext()) {
+                    String k = it.next();
+                    if (newest == null || k.compareTo(newest) > 0) newest = k;
+                }
+                String prev = lastMsg.get(room);
+                lastMsg.put(room, newest);
+                if (prev == null || prev.equals(newest)) return;
+                JSONObject m = o.optJSONObject(newest);
+                if (m == null) return;
+                String u = m.optString("u");
+                String t = m.optString("t");
+                if (u.equalsIgnoreCase(client.getUser()) || t.startsWith(CALL_TEXT)) return;
+                if (page == PAGE_CHAT && room.equals(chatRoom) && panel.getVisibility() == View.VISIBLE) return;
+                String where = room.startsWith("dm_") ? u : u + " di " + room;
+                showBanner(where, t, R.drawable.ic_social_chat, false, () -> {
+                    chatRoom = room;
+                    showPage(PAGE_CHAT);
+                }, null);
+            });
+        }
+
+        // panggilan masuk
+        client.get("voice", (j, e) -> {
+            if (e != null || !notifOn()) return;
+            JSONObject all = j instanceof JSONObject ? (JSONObject) j : null;
+            Set<String> active = new HashSet<>();
+            if (all != null) {
+                for (Map.Entry<String, String> f : notifFriends.entrySet()) {
+                    String id = dmId(my, f.getKey());
+                    Map<String, Boolean> mem = membersOf(all.optJSONObject(id));
+                    if (mem.containsKey(f.getKey()) && !mem.containsKey(my)) {
+                        active.add(id);
+                        if (voiceRoom == null && !ringing.contains(id)) {
+                            ringing.add(id);
+                            final String name = f.getValue();
+                            showBanner("Panggilan dari " + name, "Voice chat masuk", R.drawable.ic_social_phone, true,
+                                    () -> tryJoin(id), () -> { });
+                        }
+                    }
+                }
+            }
+            ringing.retainAll(active);
+        });
+    }
+
+    private void stopTone() {
+        try {
+            if (tone != null) tone.stop();
+        } catch (Throwable ignored) { }
+        tone = null;
+    }
+
+    private void playTone(boolean ring) {
+        stopTone();
+        try {
+            Uri u = RingtoneManager.getDefaultUri(ring ? RingtoneManager.TYPE_RINGTONE : RingtoneManager.TYPE_NOTIFICATION);
+            tone = RingtoneManager.getRingtone(act, u);
+            if (tone != null) tone.play();
+        } catch (Throwable ignored) { }
+        try {
+            Vibrator vb = (Vibrator) act.getSystemService(Context.VIBRATOR_SERVICE);
+            if (vb != null) {
+                if (Build.VERSION.SDK_INT >= 26) vb.vibrate(VibrationEffect.createOneShot(ring ? 400 : 60, VibrationEffect.DEFAULT_AMPLITUDE));
+                else vb.vibrate(ring ? 400 : 60);
+            }
+        } catch (Throwable ignored) { }
+    }
+
+    private void dismissBanner() {
+        if (bannerHide != null) h.removeCallbacks(bannerHide);
+        bannerHide = null;
+        stopTone();
+        final View b = banner;
+        banner = null;
+        bannerCall = false;
+        if (b == null) return;
+        b.animate().cancel();
+        b.animate().alpha(0f).translationY(-dp(70)).setDuration(220)
+                .setInterpolator(new AccelerateInterpolator())
+                .withEndAction(() -> {
+                    ViewGroup p = (ViewGroup) b.getParent();
+                    if (p != null) p.removeView(b);
+                }).start();
+    }
+
+    /** Banner notifikasi di tengah atas: turun dengan animasi, hilang sendiri. Panggilan punya tombol Terima/Tolak. */
+    private void showBanner(String title, String body, int icon, boolean call, Runnable onTap, Runnable onDecline) {
+        if (!notifOn()) return;
+        if (bannerCall && !call && banner != null) return;
+        dismissBanner();
+        LinearLayout card = row();
+        GradientDrawable cb = bg(C_PANEL, 18);
+        cb.setStroke(dp(2), C_PANEL_EDGE);
+        card.setBackground(cb);
+        card.setPadding(dp(12), dp(8), dp(12), dp(8));
+        card.setClickable(true);
+        card.setElevation(dp(8));
+
+        ImageView ic = new ImageView(act);
+        ic.setImageResource(icon);
+        ic.setColorFilter(C_BLUE);
+        card.addView(ic, new LinearLayout.LayoutParams(dp(28), dp(28)));
+
+        LinearLayout col = column();
+        TextView t = label(title, 14, C_TITLE);
+        t.setSingleLine(true);
+        t.setEllipsize(TextUtils.TruncateAt.END);
+        t.setMaxWidth(dp(260));
+        col.addView(t);
+        TextView bd = plain(body, 13, C_TEXT);
+        bd.setMaxLines(2);
+        bd.setEllipsize(TextUtils.TruncateAt.END);
+        bd.setMaxWidth(dp(260));
+        col.addView(bd);
+        LinearLayout.LayoutParams cl = new LinearLayout.LayoutParams(-2, -2);
+        cl.setMarginStart(dp(10));
+        card.addView(col, cl);
+
+        if (call) {
+            TextView no = pill("TOLAK", 0xFFB3261E, 0xFFFFFFFF, 13, v -> {
+                dismissBanner();
+                if (onDecline != null) onDecline.run();
+            });
+            TextView yes = pill("TERIMA", C_BLUE, C_BLUE_TEXT, 13, v -> {
+                dismissBanner();
+                if (onTap != null) onTap.run();
+            });
+            LinearLayout.LayoutParams nl = new LinearLayout.LayoutParams(-2, -2);
+            nl.setMarginStart(dp(12));
+            card.addView(no, nl);
+            LinearLayout.LayoutParams yl = new LinearLayout.LayoutParams(-2, -2);
+            yl.setMarginStart(dp(6));
+            card.addView(yes, yl);
+        } else {
+            card.setOnClickListener(v -> {
+                dismissBanner();
+                if (onTap != null) onTap.run();
+            });
+        }
+
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.CENTER_HORIZONTAL);
+        lp.topMargin = dp(8);
+        root.addView(card, lp);
+        card.setAlpha(0f);
+        card.setTranslationY(-dp(70));
+        card.animate().alpha(1f).translationY(0f).setDuration(340)
+                .setInterpolator(new OvershootInterpolator(1.0f)).start();
+        banner = card;
+        bannerCall = call;
+        playTone(call);
+        if (call) h.postDelayed(this::stopTone, 6000);
+        bannerHide = this::dismissBanner;
+        h.postDelayed(bannerHide, call ? 25000 : 4500);
     }
 }

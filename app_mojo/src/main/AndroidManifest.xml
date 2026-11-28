@@ -11,6 +11,8 @@
         android:required="false" />
 
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- dipakai untuk mencari aplikasi MobileGlues apa pun (termasuk fork) lewat libmobileglues.so -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />

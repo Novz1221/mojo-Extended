@@ -68,7 +68,7 @@ public abstract class GLESRenderSpec implements RenderSpec {
     public static class MobileGluesRenderSpec extends GLESRenderSpec {
         private LibraryPlugin provider;
         private boolean discover(Context context) {
-            if (provider == null) provider = LibraryPlugin.discoverPlugin(context, LibraryPlugin.ID_MOBILEGLUES_PLUGIN);
+            if (provider == null) provider = LibraryPlugin.discoverAny(context, library(), LibraryPlugin.ID_MOBILEGLUES_PLUGIN);
             return provider != null;
         }
         public boolean compatibleDevice(Context context) {

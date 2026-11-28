@@ -367,6 +367,17 @@ public class SocialFragment extends Fragment {
             c.addView(r);
             TextView photo = button("Ganti foto profil", true, v -> mPhotoLauncher.launch("image/*"));
             c.addView(photo, new LinearLayout.LayoutParams(-1, dp(48)));
+            final android.content.SharedPreferences np = requireContext().getSharedPreferences(SocialOverlay.NOTIF_PREFS, Context.MODE_PRIVATE);
+            final TextView nt = button("", false, null);
+            nt.setText(np.getBoolean(SocialOverlay.NOTIF_KEY, true) ? "Notifikasi: Nyala" : "Notifikasi: Mati");
+            nt.setOnClickListener(v -> {
+                boolean on = !np.getBoolean(SocialOverlay.NOTIF_KEY, true);
+                np.edit().putBoolean(SocialOverlay.NOTIF_KEY, on).apply();
+                nt.setText(on ? "Notifikasi: Nyala" : "Notifikasi: Mati");
+            });
+            LinearLayout.LayoutParams ntLp = new LinearLayout.LayoutParams(-1, dp(48));
+            ntLp.topMargin = dp(10);
+            c.addView(nt, ntLp);
             TextView out = button("Keluar dari Akun", false, v -> {
                 mClient.logout();
                 select(TAB_ACCOUNT);
