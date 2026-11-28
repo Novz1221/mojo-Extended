@@ -154,7 +154,11 @@ public class LyricsOverlay {
     public LyricsOverlay(Activity activity, ViewGroup host) {
         act = activity;
         prefs = act.getSharedPreferences(WORDS_PREFS, Context.MODE_PRIVATE);
-        wordsOn = prefs.getBoolean(WORDS_KEY, true);
+        // status lama dari tombol di pill (bisa tersimpan "mati") dibuang; sekarang hanya menu samping yang mengatur
+        wordsOn = true;
+        try {
+            prefs.edit().remove(WORDS_KEY).apply();
+        } catch (Throwable ignored) { }
         Typeface f = null;
         try {
             f = ResourcesCompat.getFont(act, R.font.noto_sans_bold);

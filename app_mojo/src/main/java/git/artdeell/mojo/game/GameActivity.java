@@ -329,16 +329,19 @@ public class GameActivity extends BaseActivity implements ControlButtonMenuListe
             android.content.SharedPreferences sp = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this);
             boolean on = !sp.getBoolean(git.artdeell.mojo.social.LyricsOverlay.PREF_KEY, true);
             sp.edit().putBoolean(git.artdeell.mojo.social.LyricsOverlay.PREF_KEY, on).apply();
-            if (on) {
-                if (mLyrics == null) {
-                    mLyrics = new git.artdeell.mojo.social.LyricsOverlay(this, (android.view.ViewGroup) findViewById(android.R.id.content));
-                }
-            } else if (mLyrics != null) {
-                mLyrics.destroy();
+            if (mLyrics != null) {
+                try {
+                    mLyrics.destroy();
+                } catch (Throwable ignored) { }
                 mLyrics = null;
             }
+            if (on) {
+                mLyrics = new git.artdeell.mojo.social.LyricsOverlay(this, (android.view.ViewGroup) findViewById(android.R.id.content));
+            }
+            Toast.makeText(this, on ? "Lirik: nyala" : "Lirik: mati", Toast.LENGTH_SHORT).show();
         } catch (Throwable t) {
             mLyrics = null;
+            Toast.makeText(this, "Lirik gagal dinyalakan: " + t, Toast.LENGTH_LONG).show();
         }
         gameActionArrayAdapter.notifyDataSetChanged();
     }
