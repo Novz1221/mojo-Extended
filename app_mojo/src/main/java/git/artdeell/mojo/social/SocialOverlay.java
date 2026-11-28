@@ -19,6 +19,9 @@ import android.os.Looper;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.animation.AccelerateInterpolator;
+import android.view.animation.DecelerateInterpolator;
+import android.view.animation.OvershootInterpolator;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
@@ -77,7 +80,7 @@ public class SocialOverlay {
     private final FrameLayout panel;
     private final ImageView[] toolButtons = new ImageView[3];
 
-    private boolean toolbarOn, running, receiverOn;
+    private boolean toolbarOn, running, receiverOn, menuOpen, loginHinted;
     private int page = PAGE_NONE;
 
     // voice
@@ -204,18 +207,86 @@ public class SocialOverlay {
         return toolbarOn;
     }
 
-    public void toggleToolbar() {
-        toolbarOn = !toolbarOn;
-        toolbar.setVisibility(toolbarOn ? View.VISIBLE : View.GONE);
-        if (!toolbarOn) {
-            page = PAGE_NONE;
-            panel.setVisibility(View.GONE);
+    /** Dipanggil GameActivity saat menu samping game terbuka/tertutup. */
+    public void setMenuOpen(boolean open) {
+        if (menuOpen == open) return;
+        menuOpen = open;
+        if (open && !loginHinted && !client.isLoggedIn()) {
+            loginHinted = true;
+            toast("Masuk dulu di menu Sosial pada launcher");
+        }
+        syncToolbar();
+    }
+
+    /** Toolbar tampil selama menu terbuka atau selama ada panel yang terbuka. */
+    private void syncToolbar() {
+        boolean want = menuOpen || page != PAGE_NONE;
+        if (want == toolbarOn) return;
+        toolbarOn = want;
+        toolbar.animate().cancel();
+        if (want) {
+            toolbar.setVisibility(View.VISIBLE);
+            toolbar.setAlpha(0f);
+            toolbar.setTranslationX(-dp(34));
+            toolbar.animate().alpha(1f).translationX(0f).setDuration(320)
+                    .setInterpolator(new OvershootInterpolator(0.8f)).start();
+            for (int i = 0; i < toolButtons.length; i++) {
+                ImageView b = toolButtons[i];
+                b.animate().cancel();
+                b.setAlpha(0f);
+                b.setScaleX(0.6f);
+                b.setScaleY(0.6f);
+                b.animate().alpha(1f).scaleX(1f).scaleY(1f).setStartDelay(60L + i * 55L).setDuration(260)
+                        .setInterpolator(new OvershootInterpolator(1.4f)).start();
+            }
+        } else {
+            toolbar.animate().alpha(0f).translationX(-dp(34)).setDuration(200)
+                    .setInterpolator(new AccelerateInterpolator())
+                    .withEndAction(() -> {
+                        if (!toolbarOn) toolbar.setVisibility(View.GONE);
+                    }).start();
         }
         positionStrip();
         ensureTick();
-        if (toolbarOn && !client.isLoggedIn()) {
-            toast("Masuk dulu di menu Sosial pada launcher");
+    }
+
+    private void openPanel() {
+        boolean fresh = panel.getVisibility() != View.VISIBLE;
+        if (!fresh && panel.getAlpha() >= 1f && panel.getScaleX() >= 1f) return;
+        panel.animate().cancel();
+        panel.setVisibility(View.VISIBLE);
+        if (fresh) {
+            panel.setPivotX(0f);
+            panel.setPivotY(dp(40));
+            panel.setAlpha(0f);
+            panel.setScaleX(0.9f);
+            panel.setScaleY(0.9f);
+            panel.setTranslationX(-dp(24));
         }
+        panel.animate().alpha(1f).scaleX(1f).scaleY(1f).translationX(0f).setDuration(320)
+                .setInterpolator(new DecelerateInterpolator(2.4f)).start();
+    }
+
+    private void closePanel() {
+        if (panel.getVisibility() != View.VISIBLE) return;
+        panel.animate().cancel();
+        panel.setPivotX(0f);
+        panel.setPivotY(dp(40));
+        panel.animate().alpha(0f).scaleX(0.92f).scaleY(0.92f).translationX(-dp(16)).setDuration(210)
+                .setInterpolator(new AccelerateInterpolator(1.5f))
+                .withEndAction(() -> {
+                    if (page == PAGE_NONE) {
+                        panel.setVisibility(View.GONE);
+                        positionStrip();
+                    }
+                }).start();
+    }
+
+    private void fadeIn(View v) {
+        v.setAlpha(0f);
+        v.setTranslationY(dp(8));
+        v.animate().alpha(1f).translationY(0f).setDuration(220)
+                .setInterpolator(new DecelerateInterpolator(1.8f)).start();
     }
 
     public void onPermissionResult(int requestCode, int[] grants) {
@@ -326,8 +397,9 @@ public class SocialOverlay {
     private void togglePage(int p) {
         if (page == p && panel.getVisibility() == View.VISIBLE) {
             page = PAGE_NONE;
-            panel.setVisibility(View.GONE);
+            closePanel();
             highlight();
+            syncToolbar();
             positionStrip();
             return;
         }
@@ -341,8 +413,9 @@ public class SocialOverlay {
         muteBtn = null;
         roomList = null;
         msgBox = null;
+        boolean wasOpen = panel.getVisibility() == View.VISIBLE && panel.getAlpha() >= 1f;
         panel.removeAllViews();
-        panel.setVisibility(View.VISIBLE);
+        openPanel();
         if (!client.isLoggedIn()) {
             LinearLayout c = column();
             c.addView(label("SOSIAL", 26, C_TITLE));
@@ -350,6 +423,7 @@ public class SocialOverlay {
             t.setPadding(0, dp(12), 0, 0);
             c.addView(t);
             panel.addView(c, new FrameLayout.LayoutParams(-1, -1));
+            if (wasOpen) fadeIn(c);
             highlight();
             positionStrip();
             return;
@@ -363,6 +437,7 @@ public class SocialOverlay {
             default: v = voiceRoom != null ? buildCall() : buildRoomList(); break;
         }
         panel.addView(v, new FrameLayout.LayoutParams(-1, -1));
+        if (wasOpen) fadeIn(v);
         highlight();
         positionStrip();
         ensureTick();

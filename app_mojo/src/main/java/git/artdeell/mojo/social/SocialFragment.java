@@ -84,6 +84,11 @@ public class SocialFragment extends Fragment {
         void show(View child) {
             view.removeAllViews();
             view.addView(child, new ViewGroup.LayoutParams(-1, -1));
+            float d = view.getResources().getDisplayMetrics().density;
+            child.setAlpha(0f);
+            child.setTranslationY(14 * d);
+            child.animate().alpha(1f).translationY(0f).setDuration(300)
+                    .setInterpolator(new android.view.animation.DecelerateInterpolator(2.2f)).start();
         }
     }
 
@@ -162,6 +167,10 @@ public class SocialFragment extends Fragment {
             mTabs[i].setOnClickListener(v -> select(t));
         }
         Fluid.pressAll(view);
+        view.setAlpha(0f);
+        view.setTranslationX(dp(28));
+        view.animate().alpha(1f).translationX(0f).setDuration(340)
+                .setInterpolator(new android.view.animation.DecelerateInterpolator(2.4f)).start();
         registerVoiceReceiver();
         if (mClient.isVoiceHint()) VoiceService.query(requireContext());
         select(mClient.isConfigured() && mClient.isLoggedIn() ? TAB_CHAT : TAB_ACCOUNT);
@@ -292,7 +301,23 @@ public class SocialFragment extends Fragment {
 
     // ---- setup ----
 
+    private View scrollable(View content) {
+        ScrollView sv = new ScrollView(requireContext());
+        sv.setFillViewport(false);
+        sv.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        sv.addView(content, new ViewGroup.LayoutParams(-1, -2));
+        return sv;
+    }
+
     private View buildSetup() {
+        return scrollable(buildSetupContent());
+    }
+
+    private View buildAccount() {
+        return scrollable(buildAccountContent());
+    }
+
+    private View buildSetupContent() {
         LinearLayout c = column();
         c.setPadding(dp(8), dp(8), dp(8), 0);
         c.addView(text("Hubungkan database", 20, R.color.m3_text));
@@ -321,9 +346,9 @@ public class SocialFragment extends Fragment {
 
     // ---- account ----
 
-    private View buildAccount() {
+    private View buildAccountContent() {
         LinearLayout c = column();
-        c.setPadding(dp(8), dp(8), dp(8), 0);
+        c.setPadding(dp(8), dp(4), dp(8), dp(16));
         c.addView(text("Akun Sosial", 20, R.color.m3_text));
         if (mClient.isLoggedIn()) {
             String name = mClient.getUser();
@@ -362,7 +387,7 @@ public class SocialFragment extends Fragment {
         Account acc = null;
         try { acc = Accounts.getCurrent(); } catch (Exception ignored) { }
         if (acc != null && acc.username != null) name.setText(acc.username.replaceAll("[^A-Za-z0-9_]", "_"));
-        c.addView(name, new LinearLayout.LayoutParams(-1, dp(48)));
+        c.addView(name, new LinearLayout.LayoutParams(-1, dp(46)));
         final EditText pass = input("Password (minimal " + SocialClient.MIN_PASSWORD + " karakter)");
         pass.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         LinearLayout.LayoutParams pl = new LinearLayout.LayoutParams(-1, dp(48));

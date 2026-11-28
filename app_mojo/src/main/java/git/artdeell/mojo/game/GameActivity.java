@@ -234,6 +234,17 @@ public class GameActivity extends BaseActivity implements ControlButtonMenuListe
 
         mDrawerPullButton.setOnClickListener(v -> onClickedMenu());
         drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_LOCKED_CLOSED);
+        drawerLayout.addDrawerListener(new DrawerLayout.SimpleDrawerListener() {
+            @Override
+            public void onDrawerSlide(@NonNull View drawerView, float slideOffset) {
+                if (mSocial != null && slideOffset > 0.02f) mSocial.setMenuOpen(true);
+            }
+
+            @Override
+            public void onDrawerClosed(@NonNull View drawerView) {
+                if (mSocial != null) mSocial.setMenuOpen(false);
+            }
+        });
         launcherGLView.mCursorView.setCursorScale(LauncherPreferences.PREF_MOUSESCALE);
         weakCursor = new WeakReference<>(launcherGLView.mCursorView);
 
@@ -275,9 +286,6 @@ public class GameActivity extends BaseActivity implements ControlButtonMenuListe
                      case GameMenuAdapter.POS_RES: mRecorder.cycleResolution(); return;
                      case GameMenuAdapter.POS_FPS: mRecorder.cycleFps(); return;
                      case GameMenuAdapter.POS_SHOW_FPS: toggleShowFps(); return;
-                     case GameMenuAdapter.POS_SOCIAL:
-                         if (mSocial != null) mSocial.toggleToolbar();
-                         break;
                 }
                 drawerLayout.closeDrawers();
             };
