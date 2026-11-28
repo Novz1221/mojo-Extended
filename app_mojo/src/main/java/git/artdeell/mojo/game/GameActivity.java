@@ -112,6 +112,7 @@ public class GameActivity extends BaseActivity implements ControlButtonMenuListe
 
     private QuickSettingSideDialog mQuickSettingSideDialog;
     private git.artdeell.mojo.social.SocialOverlay mSocial;
+    private git.artdeell.mojo.social.LyricsOverlay mLyrics;
 
     public static int mForcedPanningHeight = 0;
     public static int mImeHeight = 0;
@@ -230,6 +231,14 @@ public class GameActivity extends BaseActivity implements ControlButtonMenuListe
             mSocial = new git.artdeell.mojo.social.SocialOverlay(this, (android.view.ViewGroup) findViewById(android.R.id.content));
         } catch (Throwable t) {
             mSocial = null;
+        }
+        try {
+            if (androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
+                    .getBoolean(git.artdeell.mojo.social.LyricsOverlay.PREF_KEY, true)) {
+                mLyrics = new git.artdeell.mojo.social.LyricsOverlay(this, (android.view.ViewGroup) findViewById(android.R.id.content));
+            }
+        } catch (Throwable t) {
+            mLyrics = null;
         }
 
         mDrawerPullButton.setOnClickListener(v -> onClickedMenu());
@@ -404,6 +413,7 @@ public class GameActivity extends BaseActivity implements ControlButtonMenuListe
     @Override
     protected void onDestroy() {
         if (mSocial != null) mSocial.destroy();
+        if (mLyrics != null) mLyrics.destroy();
         ScreenRecorder.stopNow();
         super.onDestroy();
         ContextExecutor.clearActivity();

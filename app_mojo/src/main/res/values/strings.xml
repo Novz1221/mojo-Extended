@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
     <!-- App name part -->
-    <string name="app_short_name">MJExtended 2.1</string>
+    <string name="app_short_name">MJExtended</string>
 
     <!-- Action bar part -->
 
@@ -774,4 +774,8 @@
         <item quantity="one">%d year ago</item>
         <item quantity="other">%d years ago</item>
     </plurals>
+    <string name="pref_lyrics_title">Lagu dan lirik di game</string>
+    <string name="pref_lyrics_summary">Tampilkan lagu yang sedang diputar (misalnya Spotify) di atas layar game, dengan lirik kata per kata. Ketuk pill lagu di game untuk menyalakan atau mematikan lirik.</string>
+    <string name="pref_lyrics_access_title">Beri akses notifikasi untuk lirik</string>
+    <string name="pref_lyrics_access_summary">Dibutuhkan agar launcher bisa membaca judul, artis, dan posisi lagu. Nyalakan untuk aplikasi ini di halaman yang terbuka.</string>
 </resources>

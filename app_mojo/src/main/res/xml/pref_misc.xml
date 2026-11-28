@@ -54,6 +54,16 @@
             android:title="@string/pref_blocklist_disable_title"
             android:summary="@string/pref_blocklist_disable_description"/>
 
+        <SwitchPreferenceCompat
+            android:defaultValue="true"
+            android:key="lyricsOverlay"
+            android:title="@string/pref_lyrics_title"
+            android:summary="@string/pref_lyrics_summary"/>
+        <Preference
+            android:key="lyricsAccess"
+            android:title="@string/pref_lyrics_access_title"
+            android:summary="@string/pref_lyrics_access_summary" />
+
 
     </PreferenceCategory>
 

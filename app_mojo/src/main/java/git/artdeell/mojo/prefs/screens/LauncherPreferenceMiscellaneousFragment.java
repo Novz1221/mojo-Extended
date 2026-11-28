@@ -2,6 +2,8 @@ package git.artdeell.mojo.prefs.screens;
 
 import android.Manifest;
 import android.app.Activity;
+import android.content.Intent;
+import android.provider.Settings;
 import android.net.Uri;
 import android.os.Bundle;
 import android.widget.Toast;
@@ -52,6 +54,7 @@ public class LauncherPreferenceMiscellaneousFragment extends LauncherPreferenceF
         });
         setupCacheClearPreference();
         setupMicrophoneRequestPreference();
+        setupLyricsAccessPreference();
         updateVisibility();
     }
 
@@ -63,6 +66,17 @@ public class LauncherPreferenceMiscellaneousFragment extends LauncherPreferenceF
     @Override
     public void onResume() {
         super.onResume();
+    }
+
+    private void setupLyricsAccessPreference() {
+        requirePreference("lyricsAccess").setOnPreferenceClickListener(preference -> {
+            try {
+                startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS));
+            } catch (Exception e) {
+                Toast.makeText(requireContext(), "Tidak bisa membuka pengaturan akses notifikasi", Toast.LENGTH_LONG).show();
+            }
+            return true;
+        });
     }
 
     private void setupMicrophoneRequestPreference() {
