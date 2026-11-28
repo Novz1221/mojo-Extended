@@ -49,8 +49,7 @@ public class VoiceService extends Service {
 
     private static final String CHANNEL = "voice_chat";
     private static final int NOTIF_ID = 7721;
-    private static final long BEAT_MS = 30000, WATCH_MS = 15000;
-    private static final long ALONE_LEAVE_MS = 2 * 60 * 1000L, IDLE_LEAVE_MS = 10 * 60 * 1000L;
+    private static final long BEAT_MS = 30000;
 
     // ---- API untuk UI ----
 
@@ -104,7 +103,7 @@ public class VoiceService extends Service {
     private String mRoom, mKey, mDbUrl;
     private int mRemote;
     private Set<Integer> mSpeaking = new HashSet<>();
-    private long mAloneAt, mActiveAt;
+    private long mActiveAt;
 
     private final Runnable mBeat = new Runnable() {
         @Override
@@ -112,24 +111,6 @@ public class VoiceService extends Service {
             if (!mActive) return;
             putPresence();
             mUi.postDelayed(this, BEAT_MS);
-        }
-    };
-
-    private final Runnable mWatch = new Runnable() {
-        @Override
-        public void run() {
-            if (!mActive) return;
-            long now = SystemClock.elapsedRealtime();
-            if (mRemote > 0) mAloneAt = now;
-            if (now - mAloneAt > ALONE_LEAVE_MS) {
-                end("Keluar otomatis: sendirian terlalu lama");
-                return;
-            }
-            if (now - mActiveAt > IDLE_LEAVE_MS) {
-                end("Keluar otomatis: tidak ada yang bicara");
-                return;
-            }
-            mUi.postDelayed(this, WATCH_MS);
         }
     };
 
@@ -206,10 +187,9 @@ public class VoiceService extends Service {
             return;
         }
         mActive = true;
-        mAloneAt = mActiveAt = SystemClock.elapsedRealtime();
+        mActiveAt = SystemClock.elapsedRealtime();
         putPresence();
         mUi.postDelayed(mBeat, BEAT_MS);
-        mUi.postDelayed(mWatch, WATCH_MS);
         broadcastState(null);
     }
 
@@ -232,7 +212,6 @@ public class VoiceService extends Service {
 
     private void cleanup() {
         mUi.removeCallbacks(mBeat);
-        mUi.removeCallbacks(mWatch);
         if (mEngine != null) {
             mEngine.leave();
             mEngine = null;

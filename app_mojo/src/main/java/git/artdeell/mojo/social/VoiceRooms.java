@@ -18,6 +18,17 @@ public final class VoiceRooms {
 
     private VoiceRooms() { }
 
+    /** Membungkus hasil voice/<room>/m menjadi objek room ({"m": ...}) agar bisa dibaca membersOf() */
+    public static JSONObject withMembers(Object membersJson) {
+        JSONObject room = new JSONObject();
+        if (membersJson instanceof JSONObject) {
+            try {
+                room.put("m", membersJson);
+            } catch (org.json.JSONException ignored) { }
+        }
+        return room;
+    }
+
     public static boolean hasLock(JSONObject room) {
         return room != null && room.optJSONObject("p") != null;
     }

@@ -939,9 +939,9 @@ public class SocialFragment extends Fragment {
 
     private void refreshCall(LinearLayout tiles, TextView count) {
         if (mVoiceRoom == null) return;
-        mClient.get("voice/" + mVoiceRoom, (json, err) -> {
+        mClient.get("voice/" + mVoiceRoom + "/m", (json, err) -> {
             if (!isAdded() || mVoiceRoom == null || err != null) return;
-            java.util.Map<String, Boolean> members = membersOf(json instanceof JSONObject ? (JSONObject) json : null);
+            java.util.Map<String, Boolean> members = membersOf(VoiceRooms.withMembers(json));
             count.setText(members.size() + " di room");
             tiles.removeAllViews();
             mAvatars.clear();

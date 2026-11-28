@@ -1430,9 +1430,9 @@ public class SocialOverlay {
     private void refreshMembers() {
         if (voiceRoom == null || !client.isLoggedIn()) return;
         final String room = voiceRoom;
-        client.get("voice/" + room, (json, err) -> {
+        client.get("voice/" + room + "/m", (json, err) -> {
             if (err != null || voiceRoom == null || !room.equals(voiceRoom)) return;
-            Map<String, Boolean> now = membersOf(json instanceof JSONObject ? (JSONObject) json : null);
+            Map<String, Boolean> now = membersOf(VoiceRooms.withMembers(json));
             if (!now.containsKey(me())) now.put(me(), muted);
             boolean same = now.equals(members);
             members = now;
