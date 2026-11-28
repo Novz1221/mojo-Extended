@@ -127,13 +127,25 @@ public final class M3Dialog {
 
     public static Dialog input(Context context, CharSequence title, CharSequence hint,
                                @Nullable CharSequence initial, CharSequence positive, TextCallback callback) {
+        return input(context, title, hint, initial, positive, InputType.TYPE_CLASS_TEXT, callback);
+    }
+
+    /** Dialog isian password: teks tersamar. */
+    public static Dialog inputPassword(Context context, CharSequence title, CharSequence hint,
+                                       CharSequence positive, TextCallback callback) {
+        return input(context, title, hint, null, positive,
+                InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD, callback);
+    }
+
+    public static Dialog input(Context context, CharSequence title, CharSequence hint,
+                               @Nullable CharSequence initial, CharSequence positive, int inputType, TextCallback callback) {
         LinearLayout card = card(context);
         card.addView(label(context, title, 19, R.color.m3_text));
 
         EditText editText = new EditText(context);
         editText.setHint(hint);
         editText.setSingleLine(true);
-        editText.setInputType(InputType.TYPE_CLASS_TEXT);
+        editText.setInputType(inputType);
         editText.setTextSize(15);
         editText.setTextColor(ContextCompat.getColor(context, R.color.m3_text));
         editText.setHintTextColor(ContextCompat.getColor(context, R.color.m3_text_dim));

@@ -297,6 +297,11 @@ public final class SocialClient {
         request("POST", path, body, cb);
     }
 
+    /** PATCH lewat POST + x-http-method-override, karena HttpURLConnection tidak mendukung PATCH. */
+    public void patch(String path, Object body, Callback cb) {
+        request("POST", path + (path.contains("?") ? "&" : "?") + "x-http-method-override=PATCH", body, cb);
+    }
+
     public void delete(String path, Callback cb) {
         request("DELETE", path, null, cb);
     }

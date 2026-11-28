@@ -172,6 +172,7 @@ public class SocialFragment extends Fragment {
         view.animate().alpha(1f).translationX(0f).setDuration(340)
                 .setInterpolator(new android.view.animation.DecelerateInterpolator(2.4f)).start();
         registerVoiceReceiver();
+        ChatCleanup.runIfDue(requireContext(), mClient);
         if (mClient.isVoiceHint()) VoiceService.query(requireContext());
         select(mClient.isConfigured() && mClient.isLoggedIn() ? TAB_CHAT : TAB_ACCOUNT);
     }

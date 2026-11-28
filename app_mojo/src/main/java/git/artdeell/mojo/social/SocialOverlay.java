@@ -99,6 +99,7 @@ public class SocialOverlay {
     private final Map<String, String> lastMsg = new HashMap<>();
     private final Set<String> seenReq = new HashSet<>();
     private final Set<String> ringing = new HashSet<>();
+    private final Set<String> mutual = new HashSet<>();
     private View banner;
     private Runnable bannerHide;
     private Ringtone tone;
@@ -245,6 +246,7 @@ public class SocialOverlay {
         receiverOn = true;
         VoiceService.query(activity);
         ensureNotif();
+        ChatCleanup.runIfDue(activity, client);
     }
 
     // ---- API untuk GameActivity ----
@@ -600,8 +602,19 @@ public class SocialOverlay {
                 n.setSingleLine(true);
                 n.setPadding(dp(10), 0, 0, 0);
                 r.addView(n, new LinearLayout.LayoutParams(0, -2, 1f));
+                final String dm = dmId(my, fk);
+                final ImageView muteIc = iconBtn(isMuted(dm) ? R.drawable.ic_social_bell_off : R.drawable.ic_social_bell,
+                        isMuted(dm) ? 0xFF8A8A8A : 0xFFFFFFFF, 0, 40, null);
+                muteIc.setOnClickListener(v -> {
+                    boolean m = !isMuted(dm);
+                    setMuted(dm, m);
+                    muteIc.setImageResource(m ? R.drawable.ic_social_bell_off : R.drawable.ic_social_bell);
+                    muteIc.setColorFilter(m ? 0xFF8A8A8A : 0xFFFFFFFF);
+                    toast(m ? name + " dimute: chat dan panggilan tidak memunculkan notifikasi" : name + " tidak dimute lagi");
+                });
+                r.addView(muteIc, new LinearLayout.LayoutParams(dp(40), dp(40)));
                 r.addView(iconBtn(R.drawable.ic_social_chat, 0xFFFFFFFF, 0, 40, v -> {
-                    chatRoom = dmId(my, fk);
+                    chatRoom = dm;
                     showPage(PAGE_CHAT);
                 }), new LinearLayout.LayoutParams(dp(40), dp(40)));
                 r.addView(iconBtn(R.drawable.ic_social_phone, 0xFFFFFFFF, 0, 40, v -> callFriend(my, fk, name)), new LinearLayout.LayoutParams(dp(40), dp(40)));
@@ -613,9 +626,11 @@ public class SocialOverlay {
     }
 
     private void callFriend(String my, String fk, String name) {
-        String room = dmId(my, fk);
-        postMessage(room, "Memanggil kamu lewat voice. Tekan ikon telepon di namaku pada daftar teman.");
-        tryJoin(room);
+        final String room = dmId(my, fk);
+        verifyDm(room, () -> {
+            postMessage(room, CALL_TEXT + ". Tekan ikon telepon di namaku pada daftar teman.");
+            doTryJoin(room);
+        });
     }
 
     private void sendFriendRequest(String name) {
@@ -839,7 +854,42 @@ public class SocialOverlay {
         return out;
     }
 
+    /** Panggilan hanya boleh ke teman yang permintaannya sudah diterima kedua pihak. */
+    private void verifyDm(String id, Runnable ok) {
+        final String my = me();
+        client.get("friends/" + my, (fj, fe) -> {
+            String friend = null;
+            if (fj instanceof JSONObject) {
+                Iterator<String> it = ((JSONObject) fj).keys();
+                while (it.hasNext()) {
+                    String fk = it.next();
+                    if (dmId(my, fk).equals(id)) {
+                        friend = fk;
+                        break;
+                    }
+                }
+            }
+            if (friend == null) {
+                toast("Telepon hanya untuk teman yang sudah menerima permintaan");
+                return;
+            }
+            final String f = friend;
+            client.get("friends/" + f + "/" + my, (rj, re) -> {
+                if (re != null || rj == null) {
+                    toast("Temanmu belum menerima permintaan pertemanan");
+                    return;
+                }
+                ok.run();
+            });
+        });
+    }
+
     private void tryJoin(String id) {
+        if (id.startsWith("dm_")) verifyDm(id, () -> doTryJoin(id));
+        else doTryJoin(id);
+    }
+
+    private void doTryJoin(String id) {
         client.get("voice/" + id, (json, err) -> {
             if (err != null) {
                 toast(err);
@@ -1104,9 +1154,24 @@ public class SocialOverlay {
             });
             return true;
         }));
+        final String roomNow = chatRoom;
+        final TextView muteRoom = pill(isMuted(roomNow) ? "UNMUTE" : "MUTE", C_ROW, isMuted(roomNow) ? 0xFFE57373 : C_TITLE, 18, null);
+        muteRoom.setOnClickListener(v -> {
+            boolean m = !isMuted(roomNow);
+            setMuted(roomNow, m);
+            muteRoom.setText(m ? "UNMUTE" : "MUTE");
+            muteRoom.setTextColor(m ? 0xFFE57373 : C_TITLE);
+            toast(m ? "Chat ini dimute, tidak ada notifikasi" : "Notifikasi chat ini dinyalakan");
+            loadChatTabs();
+        });
+        LinearLayout btnRow = row();
+        btnRow.addView(newChat);
+        LinearLayout.LayoutParams mrp = new LinearLayout.LayoutParams(-2, -2);
+        mrp.setMarginStart(dp(8));
+        btnRow.addView(muteRoom, mrp);
         LinearLayout.LayoutParams nl = new LinearLayout.LayoutParams(-2, -2);
         nl.topMargin = dp(8);
-        c.addView(newChat, nl);
+        c.addView(btnRow, nl);
 
         LinearLayout input = row();
         TextView field = label("KETIK PESAN DI SINI", 16, 0xFFB0B0B0);
@@ -1189,7 +1254,7 @@ public class SocialOverlay {
                 bar.removeAllViews();
                 for (String[] t : tabs) {
                     boolean on = t[0].equals(chatRoom);
-                    TextView tv = pill(t[1], on ? 0xFF4A5470 : 0xFF3A3D47, 0xFFFFFFFF, 16, v -> {
+                    TextView tv = pill(t[1], on ? 0xFF4A5470 : 0xFF3A3D47, isMuted(t[0]) ? 0xFF8A8A8A : 0xFFFFFFFF, 16, v -> {
                         chatRoom = t[0];
                         lastKey = "";
                         showPage(PAGE_CHAT);
@@ -1334,6 +1399,17 @@ public class SocialOverlay {
 
     // ---- notifikasi (chat, permintaan teman, panggilan) ----
 
+    private boolean isMuted(String room) {
+        return notifPrefs.getStringSet("muted", new HashSet<>()).contains(room);
+    }
+
+    private void setMuted(String room, boolean m) {
+        Set<String> cur = new HashSet<>(notifPrefs.getStringSet("muted", new HashSet<>()));
+        if (m) cur.add(room);
+        else cur.remove(room);
+        notifPrefs.edit().putStringSet("muted", cur).apply();
+    }
+
     private boolean notifOn() {
         return notifPrefs.getBoolean(NOTIF_KEY, true);
     }
@@ -1385,6 +1461,14 @@ public class SocialOverlay {
                     String fk = it.next();
                     notifFriends.put(fk, o.optString(fk, fk));
                 }
+                mutual.retainAll(notifFriends.keySet());
+                for (String fk : notifFriends.keySet()) {
+                    client.get("friends/" + fk + "/" + my, (rj, re) -> {
+                        if (re != null) return;
+                        if (rj != null) mutual.add(fk);
+                        else mutual.remove(fk);
+                    });
+                }
             });
             client.get("rooms", (j, e) -> {
                 if (!(j instanceof JSONObject)) return;
@@ -1426,7 +1510,7 @@ public class SocialOverlay {
         List<String> rooms = new ArrayList<>();
         rooms.add("umum");
         rooms.addAll(notifRooms);
-        for (String fk : notifFriends.keySet()) rooms.add(dmId(my, fk));
+        for (String fk : notifFriends.keySet()) if (mutual.contains(fk)) rooms.add(dmId(my, fk));
         for (String room : rooms) {
             client.get("messages/" + room + "?orderBy=" + SocialClient.q("$key") + "&limitToLast=1", (j, e) -> {
                 if (e != null || !notifOn()) return;
@@ -1443,7 +1527,7 @@ public class SocialOverlay {
                 }
                 String prev = lastMsg.get(room);
                 lastMsg.put(room, newest);
-                if (prev == null || prev.equals(newest)) return;
+                if (prev == null || prev.equals(newest) || isMuted(room)) return;
                 JSONObject m = o.optJSONObject(newest);
                 if (m == null) return;
                 String u = m.optString("u");
@@ -1467,7 +1551,7 @@ public class SocialOverlay {
                 for (Map.Entry<String, String> f : notifFriends.entrySet()) {
                     String id = dmId(my, f.getKey());
                     Map<String, Boolean> mem = membersOf(all.optJSONObject(id));
-                    if (mem.containsKey(f.getKey()) && !mem.containsKey(my)) {
+                    if (mutual.contains(f.getKey()) && !isMuted(id) && mem.containsKey(f.getKey()) && !mem.containsKey(my)) {
                         active.add(id);
                         if (voiceRoom == null && !ringing.contains(id)) {
                             ringing.add(id);
