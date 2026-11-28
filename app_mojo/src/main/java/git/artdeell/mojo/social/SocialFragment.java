@@ -999,7 +999,12 @@ public class SocialFragment extends Fragment {
     private View buildFriends() {
         LinearLayout c = column();
         c.setPadding(dp(8), dp(8), dp(8), 0);
-        c.addView(text("Teman", 20, R.color.m3_text));
+        LinearLayout head = row();
+        head.addView(text("Teman", 20, R.color.m3_text), new LinearLayout.LayoutParams(0, -2, 1f));
+        TextView reqBtn = button("Request", false, v -> mBody.show(buildRequests()));
+        head.addView(reqBtn, new LinearLayout.LayoutParams(-2, -2));
+        c.addView(head);
+        refreshRequestCount(reqBtn);
         LinearLayout r = row();
         EditText name = input("Username teman");
         r.addView(name, new LinearLayout.LayoutParams(0, dp(44), 1f));
@@ -1076,6 +1081,78 @@ public class SocialFragment extends Fragment {
                 card.addView(text(o.optString(fk, fk), 16, R.color.m3_text), new LinearLayout.LayoutParams(0, -2, 1f));
                 card.addView(button("Hapus", false, v ->
                         mClient.delete("friends/" + me + "/" + fk, (j, e) -> loadFriends(list))));
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+                lp.topMargin = dp(6);
+                list.addView(card, lp);
+            }
+        });
+    }
+
+    // ---- permintaan pertemanan ----
+
+    private void refreshRequestCount(TextView btn) {
+        String me = SocialClient.key(mClient.getUser());
+        mClient.get("requests/" + me, (json, err) -> {
+            if (!isAdded() || err != null) return;
+            int n = json instanceof JSONObject ? ((JSONObject) json).length() : 0;
+            btn.setText(n > 0 ? "Request (" + n + ")" : "Request");
+        });
+    }
+
+    private View buildRequests() {
+        LinearLayout c = column();
+        c.setPadding(dp(8), dp(8), dp(8), 0);
+        LinearLayout head = row();
+        head.addView(text("Request", 20, R.color.m3_text), new LinearLayout.LayoutParams(0, -2, 1f));
+        head.addView(button("Teman", false, v -> select(TAB_FRIENDS)), new LinearLayout.LayoutParams(-2, -2));
+        c.addView(head);
+        LinearLayout list = column();
+        ScrollView sv = new ScrollView(requireContext());
+        sv.addView(list);
+        LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-1, 0, 1f);
+        sp.topMargin = dp(8);
+        c.addView(sv, sp);
+        loadRequests(list);
+        return c;
+    }
+
+    private void loadRequests(LinearLayout list) {
+        String me = SocialClient.key(mClient.getUser());
+        mClient.get("requests/" + me, (json, err) -> {
+            if (!isAdded()) return;
+            list.removeAllViews();
+            if (err != null) {
+                list.addView(text(err, 13, R.color.m3_text_dim));
+                return;
+            }
+            JSONObject o = json instanceof JSONObject ? (JSONObject) json : new JSONObject();
+            list.addView(text("Permintaan masuk (" + o.length() + ")", 14, R.color.m3_text_dim));
+            if (o.length() == 0) {
+                TextView empty = text("Tidak ada permintaan pertemanan.", 14, R.color.m3_text_dim);
+                empty.setPadding(0, dp(10), 0, 0);
+                list.addView(empty);
+            }
+            Iterator<String> it = o.keys();
+            while (it.hasNext()) {
+                String fk = it.next();
+                String name = o.optString(fk, fk);
+                LinearLayout card = row();
+                card.setBackgroundResource(R.drawable.m3_card);
+                card.setPadding(dp(16), dp(10), dp(10), dp(10));
+                card.addView(text(name, 16, R.color.m3_text), new LinearLayout.LayoutParams(0, -2, 1f));
+                card.addView(button("Terima", true, v ->
+                        mClient.put("friends/" + me + "/" + fk, name, (j, e) -> {
+                            if (e != null) {
+                                toast(e);
+                                return;
+                            }
+                            mClient.put("friends/" + fk + "/" + me, mClient.getUser(), (j2, e2) ->
+                                    mClient.delete("requests/" + me + "/" + fk, (j3, e3) -> loadRequests(list)));
+                        })));
+                LinearLayout.LayoutParams xp = new LinearLayout.LayoutParams(-2, -2);
+                xp.setMarginStart(dp(6));
+                card.addView(button("Tolak", false, v ->
+                        mClient.delete("requests/" + me + "/" + fk, (j, e) -> loadRequests(list))), xp);
                 LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
                 lp.topMargin = dp(6);
                 list.addView(card, lp);

@@ -1,51 +1,156 @@
-# Setup fitur Sosial
+# Panduan Firebase Pribadi untuk Fitur Sosial (Mabar)
 
-URL database sudah tertanam di launcher (`SocialClient.DEFAULT_URL`), pemain tidak perlu memasukkan apa pun.
-Langkah satu kali, hanya untuk pemilik project Firebase `noba-be394`:
+Fitur Sosial di launcher (chat, teman, request, voice room, akun) memakai Firebase Realtime Database.
+Dengan panduan ini kamu membuat database sendiri, jadi data grup temanmu tidak bercampur dengan database bawaan.
 
-1. Buka https://console.firebase.google.com > project noba-be394 > Build > Realtime Database > tab Rules.
-2. Tempel isi `database.rules.json` dari zip ini, lalu Publish.
+Gratis: paket Spark, tanpa kartu kredit (1 GB data, 10 GB unduhan per bulan).
 
-Tanpa langkah ini, chat dan akun akan ditolak dengan pesan "Ditolak oleh aturan database".
+> Catatan: ini hanya untuk chat, teman, dan voice. Server game Minecraft untuk mabar adalah hal terpisah.
 
-Catatan:
-- Belum ada login sungguhan, jadi orang yang paham API bisa menulis pesan atas nama lain.
-- Voice room: daftar room dan anggota lewat Firebase, audio langsung lewat WebRTC P2P (lihat bagian Voice chat di bawah).
-- Paket gratis Spark: 1 GB data, 10 GB unduhan per bulan.
-- Mengganti database: tab Akun > Ganti database.
+---
 
-## Voice chat (WebRTC P2P)
+## Bagian 1: Buat project Firebase
 
-Audio langsung antar HP lewat WebRTC (library `io.getstream:stream-webrtc-android` di `app_mojo/build.gradle`). Gratis, tanpa akun, tanpa App ID, tanpa token. Pertukaran sinyal (offer, answer, ICE) memakai Firebase yang sama dengan chat, di `voice/{room}/sig/{uid}`. Aturan `database.rules.json` yang ada sudah mengizinkan path ini.
+1. Buka https://console.firebase.google.com lalu login dengan akun Google.
+2. Tekan Add project (Buat project).
+3. Isi nama bebas, misalnya mabar-kita, lalu Continue.
+4. Google Analytics boleh dimatikan, lalu Create project dan tunggu selesai.
 
-Catatan voice:
-- Maksimal 6 orang per room (`MAX_VOICE_MEMBERS`). Mesh P2P: tiap HP mengirim audio ke semua teman, jadi makin banyak orang makin berat.
-- Server STUN gratis dipakai untuk menembus NAT. Kalau ada pemain yang tidak terdengar (sering terjadi di jaringan seluler tertentu), perlu server relay TURN. Tambahkan di `WebRtcVoiceEngine.mIce` lewat `PeerConnection.IceServer.builder("turn:...").setUsername(..).setPassword(..)`.
-- Mesin audio dibungkus `VoiceEngine`, implementasinya `WebRtcVoiceEngine`, dibuat di `VoiceService.join()`.
-- Voice berjalan di `VoiceService` pada proses terpisah `:voice`, jadi tetap hidup saat game dimulai (launcher dimatikan oleh `ContextAwareDoneListener`) dan saat layar Sosial ditutup. Engine, presence Firebase, dan timer keluar otomatis ada di service ini. `SocialFragment` hanya mengirim perintah dan menerima status lewat broadcast.
-- Di dalam game, kontrol lewat notifikasi "Voice chat aktif": tombol Matikan/Nyalakan mic dan Keluar. Izinkan notifikasi untuk app ini supaya tombolnya muncul.
-- `MojoApplication` melewati inisialisasi launcher di proses `:voice`. `VoiceService` tidak boleh memakai `Tools`, `LauncherPreferences`, atau `SocialClient`.
-- Pakai headset saat main. Suara game dari speaker bisa terambil mikrofon dan terdengar oleh teman.
-- Keluar dari game tidak mematikan voice. Voice berhenti lewat tombol Keluar, keluar otomatis, atau Force Stop.
-- Belum dicoba build nyata. Kalau ada error compile, kirim lognya.
+## Bagian 2: Buat Realtime Database
+
+1. Di menu kiri pilih Build > Realtime Database.
+2. Tekan Create Database.
+3. Lokasi: pilih Singapore (asia-southeast1) supaya dekat dengan Indonesia.
+4. Mode keamanan: pilih Locked mode (akan diganti di bagian berikutnya), lalu Enable.
+
+## Bagian 3: Pasang aturan (Rules)
+
+Tanpa langkah ini chat, akun, foto profil, dan request teman akan ditolak dengan pesan "Ditolak oleh aturan database".
+
+1. Buka tab Rules di Realtime Database.
+2. Hapus semua isinya.
+3. Tempel seluruh isi di bawah ini (sama dengan database.rules.json di proyek), lalu tekan Publish.
+
+{
+  "rules": {
+    "users": {
+      "$u": {
+        ".read": true,
+        ".write": "!data.exists() || !data.child('a').exists()",
+        ".validate": "newData.hasChildren(['n','s','a'])",
+        "n": {
+          ".validate": "newData.isString() && newData.val().length >= 3 && newData.val().length <= 16"
+        },
+        "s": {
+          ".validate": "newData.isString() && newData.val().length == 64"
+        },
+        "a": {
+          ".validate": "newData.isString() && newData.val().length == 32"
+        }
+      }
+    },
+    "rooms": {
+      ".read": true,
+      "$r": {
+        ".write": true,
+        ".validate": "$r.length <= 20 && newData.val() == true"
+      }
+    },
+    "messages": {
+      "$r": {
+        ".read": true,
+        "$m": {
+          ".write": "!data.exists()",
+          ".validate": "newData.hasChildren(['u','t','ts']) && newData.child('t').isString() && newData.child('t').val().length <= 300 && newData.child('u').isString() && newData.child('u').val().length <= 16 && newData.child('ts').val() == now"
+        }
+      }
+    },
+    "friends": {
+      "$u": {
+        ".read": true,
+        ".write": true
+      }
+    },
+    "voice": {
+      ".read": true,
+      "$r": {
+        ".write": true
+      }
+    },
+    "avatars": {
+      "$u": {
+        ".read": true,
+        ".write": true,
+        ".validate": "newData.isString() && newData.val().length < 20000"
+      }
+    },
+    "requests": {
+      "$u": {
+        ".read": true,
+        "$f": {
+          ".write": true,
+          ".validate": "newData.isString() && newData.val().length <= 16"
+        }
+      }
+    }
+  }
+}
+
+## Bagian 4: Salin URL database
+
+1. Buka tab Data.
+2. Salin URL yang tampil di bagian atas. Bentuknya:
+
+https://nama-project-default-rtdb.asia-southeast1.firebasedatabase.app
+
+3. Pakai persis seperti itu, tanpa garis miring (/) di belakang. URL harus diawali https://.
+
+## Bagian 5: Hubungkan ke launcher
+
+Pilih salah satu.
+
+### Cara A: lewat aplikasi (tanpa build ulang)
+
+1. Buka launcher, masuk Sosial.
+2. Tab Akun, tekan Ganti database.
+3. Tempel URL dari Bagian 4, lalu Simpan.
+4. Ulangi di HP setiap teman.
+
+### Cara B: tanam di kode (teman tidak perlu mengisi apa pun)
+
+1. Buka app_mojo/src/main/java/git/artdeell/mojo/social/SocialClient.java.
+2. Ganti nilai DEFAULT_URL dengan URL barumu:
+
+public static final String DEFAULT_URL = "https://nama-project-default-rtdb.asia-southeast1.firebasedatabase.app";
+
+3. Build APK lalu bagikan ke teman.
+
+## Bagian 6: Mulai pakai 
+1. Setiap orang membuka Sosial > tab Akun > Daftar (username 3 sampai 16 karakter, password minimal 6 karakter).
+2. Tambah teman lewat tab Teman. Tombol Request menampilkan permintaan masuk.
+3. Buat atau gabung voice room dari tab Voice.
+4. Pakai headset saat voice supaya suara game tidak terambil mikrofon.
+
+---
+
+## Catatan penting
+
+- Semua pemain harus memakai URL yang sama, kalau tidak kalian tidak saling terlihat.
+- Keamanan: aturan database masih terbuka. Password dicek di aplikasi, jadi orang yang membongkar APK bisa menulis data. Untuk grup teman sendiri cukup, tapi jangan dibagikan ke publik luas.
+- Voice memakai WebRTC antar HP (maksimal 6 orang per room). Firebase hanya untuk pertukaran sinyal. Kalau ada teman yang tidak terdengar di jaringan seluler tertentu, perlu server relay TURN. Tambahkan di WebRtcVoiceEngine.mIce:
+
+-yg ini ga gw tambahin btw males anu banyak server
 
 
-## Menu sosial di dalam game
+PeerConnection.IceServer.builder("turn:alamat-server").setUsername("user").setPassword("pass")
 
-Di game, buka drawer menu lalu tekan **Sosial** untuk menampilkan bar ikon di kiri atas: Teman, Voice, Chat. Tekan lagi untuk menyembunyikannya.
-- **Teman**: tambah lewat username (ADD mengirim permintaan), REQUEST untuk menerima atau menolak, ikon chat membuka chat pribadi, ikon telepon membuka voice room pribadi berdua.
-- **Voice**: daftar room (SEARCH, JOIN, CREATE) dan layar panggilan dengan tombol tutup, mute, dan SUARA (volume tiap teman dan sensitivitas mic).
-- **Chat**: tab UMUM, room lain, dan chat pribadi. Mengetik lewat dialog.
-- Avatar pojok kiri atas muncul saat kamu ada di voice room. Cincin hijau berarti sedang bicara.
-- Foto profil: Sosial di launcher, tab **Akun**, tombol **Ganti foto profil**. Foto disimpan 96x96 di `avatars/{username}`.
-- Warna avatar dan tile panggilan acak per orang, tetap sama di semua HP.
+- Batas gratis: kalau pemakaian melewati paket Spark, akses database bisa dibatasi. Pantau di tab Usage.
 
-Aturan database: file `database.rules.json` ditambah `avatars` dan `requests`. Salin isinya ke Firebase Console, Realtime Database, tab Rules, lalu Publish. Tanpa ini foto profil dan permintaan teman ditolak.
+## Masalah umum
 
-## Akun dengan password
-
-Tab Akun di launcher sekarang punya **Daftar** dan **Masuk**. Daftar: isi username, password (minimal 6 karakter), ulangi password, lalu tekan Daftar, dan kamu langsung masuk. Berikutnya cukup Masuk dengan username dan password yang sama.
-- Password di-hash dengan PBKDF2 (salt acak) di HP, jadi password asli tidak pernah dikirim ke Firebase. Yang tersimpan hanya `a` (salt) dan `s` (hash) di `users/{username}`.
-- Akun lama tanpa password: masuk dari HP yang dulu mendaftarkannya, isi password baru, dan password itu otomatis terpasang. Dari HP lain akun lama tidak bisa dipakai.
-- Pengecekan password dilakukan di aplikasi. Realtime Database tanpa Firebase Auth tidak bisa memeriksa password di server, jadi aturan database lain (`friends`, `voice`, `avatars`) tetap terbuka bagi yang membongkar APK.
-- Salin `database.rules.json` terbaru ke Firebase Console lalu Publish, supaya akun baru dengan field `a` diterima.
+| Gejala | Penyebab | Solusi |
+| --- | --- | --- |
+| "Ditolak oleh aturan database" | Rules belum dipasang atau belum Publish | Ulangi Bagian 3 |
+| Tidak bisa terhubung | URL salah, ada / di belakang, atau tidak https:// | Cek lagi URL di Bagian 4 |
+| Teman tidak muncul | Beda URL database | Samakan URL di semua HP |
+| Suara teman tidak terdengar | NAT jaringan seluler | Tambahkan server TURN |

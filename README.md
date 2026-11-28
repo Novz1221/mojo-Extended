@@ -28,10 +28,11 @@ You can get MojoExtended via:
 - [ ] LTW: resolve issues with Create
 - [ ] LTW: switch to a color-renderable format for framebuffers
 - [x] Modpack/mod management tool
-- [ ] MMC-compatible instance import
+- [x] Add Chat/Voice Chat to Launcher
 - [ ] Vintage Story support
-- [ ] Implement common native library standard
+- [ ] Implement common native library standar
 
+How to make Private server? why this not working? try read SOSIAL_SETUP_md
 
 ## Known Issues
 - Some physical mice may have very slow mouse speed
